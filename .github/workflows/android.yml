@@ -35,8 +35,14 @@ jobs:
       - name: Install Android SDK packages
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
 
+      - name: Show build environment
+        run: |
+          java -version
+          gradle --version
+          sdkmanager --list_installed
+
       - name: Validate dictionary seed
-        run: gradle :dict-builder:test :dict-builder:run --args='app/src/main/assets/dictionary/dictionary_seed.json'
+        run: gradle --stacktrace :dict-builder:test :dict-builder:run --args="$GITHUB_WORKSPACE/app/src/main/assets/dictionary/dictionary_seed.json"
 
       - name: Unit tests and APKs
         run: gradle --stacktrace test assembleDebug assembleRelease
