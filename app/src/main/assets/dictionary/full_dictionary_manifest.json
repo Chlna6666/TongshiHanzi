@@ -1,0 +1,34 @@
+{
+  "formatVersion": 2,
+  "dataVersion": "mapull-2025-02-04-e804ada333b6",
+  "sourceRepository": "mapull/chinese-dictionary",
+  "sourceCommit": "e804ada333b68afddfdccbe8dcc938a72da157a7",
+  "characterCount": 21056,
+  "skippedCount": 0,
+  "sources": [
+    {
+      "sourceId": "project",
+      "name": "TongshiHanzi reviewed child-facing seed",
+      "version": "2026.08",
+      "licenseId": "GPL-3.0-or-later",
+      "attribution": "Copyright (C) 2026 Chlna6666",
+      "modificationNote": "Original reviewed child-facing definitions and metadata overrides."
+    },
+    {
+      "sourceId": "unicode",
+      "name": "Unicode character metadata",
+      "version": "Unicode 17.0 compatible fields",
+      "licenseId": "Unicode-3.0",
+      "attribution": "Unicode, Inc.",
+      "modificationNote": "Code-point formatting normalized for the application."
+    },
+    {
+      "sourceId": "mapull",
+      "name": "mapull/chinese-dictionary",
+      "version": "e804ada333b68afddfdccbe8dcc938a72da157a7",
+      "licenseId": "MIT",
+      "attribution": "Copyright (c) 2021 码谱",
+      "modificationNote": "Normalized, deduplicated and size-bounded for offline use; imported definitions require continued editorial review."
+    }
+  ]
+}
