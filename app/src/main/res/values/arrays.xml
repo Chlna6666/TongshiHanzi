@@ -22,6 +22,18 @@
         <item>light</item>
         <item>dark</item>
     </string-array>
+    <string-array name="motion_entries">
+        <item>增强弹性</item>
+        <item>跟随系统</item>
+        <item>减弱动效</item>
+        <item>关闭动效</item>
+    </string-array>
+    <string-array name="motion_values">
+        <item>full</item>
+        <item>system</item>
+        <item>reduced</item>
+        <item>off</item>
+    </string-array>
     <string-array name="font_entries">
         <item>标准</item>
         <item>大</item>
