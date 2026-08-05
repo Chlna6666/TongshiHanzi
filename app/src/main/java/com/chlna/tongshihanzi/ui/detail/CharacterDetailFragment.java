@@ -103,14 +103,18 @@ public final class CharacterDetailFragment extends Fragment {
             progress.setVisibility(View.GONE);
             if (message != null) Snackbar.make(view, message, Snackbar.LENGTH_LONG).show();
         });
-        int characterId = getArguments() == null
-                ? -1 : getArguments().getInt("characterId", -1);
-        viewModel.load(characterId);
+
+        Bundle arguments = getArguments();
+        int characterId = arguments == null ? -1 : arguments.getInt("characterId", -1);
+        String characterText = arguments == null ? "" : arguments.getString("characterText", "");
+        viewModel.load(characterId, characterText);
     }
 
     private void render() {
         character.setText(details.character.character);
         character.setContentDescription("汉字" + details.character.character);
+        favorite.setEnabled(details.character.id >= 0);
+
         List<PronunciationEntity> readings = details.pronunciations.stream()
                 .sorted(Comparator.comparingInt(value -> value.displayOrder))
                 .collect(Collectors.toList());
@@ -136,11 +140,13 @@ public final class CharacterDetailFragment extends Fragment {
 
         String traditional = details.character.traditional.equals(details.character.character)
                 ? "同简体" : details.character.traditional;
-        String wubi = details.wubiCodes.isEmpty() ? "—" : details.wubiCodes.get(0).code;
+        String wubi = details.wubiCodes.isEmpty() ? "待补充" : details.wubiCodes.get(0).code;
+        String totalStrokes = details.character.totalStrokes <= 0
+                ? "待补充" : String.valueOf(details.character.totalStrokes);
         basicInfo.setText(
                 "拼音：" + joinPinyin(readings)
                         + "\n部首：" + details.character.radical
-                        + "\n总笔画：" + details.character.totalStrokes
+                        + "\n总笔画：" + totalStrokes
                         + "\n字形结构：" + details.character.structure
                         + "\n繁体字：" + traditional
                         + "\n五笔 86：" + wubi);
@@ -148,10 +154,12 @@ public final class CharacterDetailFragment extends Fragment {
                 "Unicode：" + details.character.unicodeCodepoint
                         + "\n笔顺编号：" + empty(details.character.strokeNumber)
                         + "\n常用字：" + (details.character.common ? "是" : "否")
-                        + "\n频率排序：" + details.character.frequencyRank);
-        source.setText(
-                "数据来源标识：" + details.character.sourceId
-                        + " · 矢量笔顺来自构建时锁定的数据版本，许可详见关于页面");
+                        + "\n频率排序：" + (details.character.frequencyRank >= 99999
+                        ? "待补充" : details.character.frequencyRank));
+        source.setText(details.character.id < 0
+                ? "该字通过 Unicode 生僻字兜底展示，读音、部首、释义和笔顺尚未经过项目审校。"
+                : "数据来源标识：" + details.character.sourceId
+                + " · 矢量笔顺来自构建时锁定的数据版本，许可详见关于页面");
 
         List<StrokeEntity> sortedStrokes = new ArrayList<>(details.strokes);
         sortedStrokes.sort(Comparator.comparingInt(value -> value.strokeIndex));
@@ -226,11 +234,11 @@ public final class CharacterDetailFragment extends Fragment {
 
     private static String joinPinyin(List<PronunciationEntity> values) {
         return values.stream().map(value -> value.pinyinTone)
-                .reduce((first, second) -> first + "、" + second).orElse("—");
+                .reduce((first, second) -> first + "、" + second).orElse("待补充");
     }
 
     private static String empty(String value) {
-        return value == null || value.trim().isEmpty() ? "—" : value;
+        return value == null || value.trim().isEmpty() ? "待补充" : value;
     }
 
     private static void addEmpty(LinearLayout container, String text) {
