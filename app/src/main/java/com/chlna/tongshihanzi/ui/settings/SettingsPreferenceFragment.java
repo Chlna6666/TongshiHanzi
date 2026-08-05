@@ -1,7 +1,197 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 package com.chlna.tongshihanzi.ui.settings;
-import android.os.Bundle;import android.speech.tts.Voice;import androidx.annotation.Nullable;import androidx.navigation.fragment.NavHostFragment;import androidx.preference.ListPreference;import androidx.preference.Preference;import androidx.preference.PreferenceFragmentCompat;import com.chlna.tongshihanzi.R;import com.chlna.tongshihanzi.data.user.UserRepository;import com.chlna.tongshihanzi.speech.TtsManager;import com.chlna.tongshihanzi.util.ThemeManager;import com.google.android.material.snackbar.Snackbar;import java.util.List;
-public final class SettingsPreferenceFragment extends PreferenceFragmentCompat{
-    @Override public void onCreatePreferences(@Nullable Bundle state,@Nullable String rootKey){setPreferencesFromResource(R.xml.preferences,rootKey);TtsManager tts=TtsManager.getInstance(requireContext());tts.addReadyListener(this::updateVoices);Preference test=findPreference("test_voice");if(test!=null)test.setOnPreferenceClickListener(p->{tts.speak("你好，我是童识汉字。点击汉字，就可以听到它的读音。");return true;});Preference theme=findPreference("theme_mode");if(theme!=null)theme.setOnPreferenceChangeListener((p,v)->{p.getSharedPreferences().edit().putString("theme_mode",String.valueOf(v)).apply();ThemeManager.applySavedTheme(requireContext());return true;});Preference dynamic=findPreference("dynamic_color");if(dynamic!=null)dynamic.setOnPreferenceChangeListener((p,v)->{requireActivity().recreate();return true;});Preference clear=findPreference("clear_history");if(clear!=null)clear.setOnPreferenceClickListener(p->{new UserRepository(requireContext()).clearHistory(()->requireActivity().runOnUiThread(()->Snackbar.make(requireView(),"查询历史已清除",Snackbar.LENGTH_SHORT).show()));return true;});Preference about=findPreference("about");if(about!=null)about.setOnPreferenceClickListener(p->{NavHostFragment.findNavController(requireParentFragment()).navigate(R.id.action_settings_to_about);return true;});}
-    private void updateVoices(){if(!isAdded())return;ListPreference p=findPreference("voice_name");if(p==null)return;List<Voice> voices=TtsManager.getInstance(requireContext()).getChineseVoices();CharSequence[] entries=new CharSequence[voices.size()],values=new CharSequence[voices.size()];for(int i=0;i<voices.size();i++){Voice v=voices.get(i);entries[i]=v.getLocale().toLanguageTag()+" · "+v.getName()+(v.isNetworkConnectionRequired()?"（联网语音）":"（可离线）");values[i]=v.getName();}p.setEntries(entries);p.setEntryValues(values);p.setEnabled(!voices.isEmpty());if(voices.isEmpty())p.setSummary(R.string.tts_unavailable);}
+
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.speech.tts.Voice;
+
+import androidx.annotation.Nullable;
+import androidx.navigation.fragment.NavHostFragment;
+import androidx.preference.ListPreference;
+import androidx.preference.Preference;
+import androidx.preference.PreferenceFragmentCompat;
+
+import com.chlna.tongshihanzi.R;
+import com.chlna.tongshihanzi.data.user.UserRepository;
+import com.chlna.tongshihanzi.speech.TtsManager;
+import com.chlna.tongshihanzi.util.ThemeManager;
+import com.google.android.material.snackbar.Snackbar;
+
+import java.util.List;
+
+public final class SettingsPreferenceFragment extends PreferenceFragmentCompat {
+    private final Handler main = new Handler(Looper.getMainLooper());
+    private final Runnable readyListener = this::updateVoices;
+    private TtsManager tts;
+
+    @Override
+    public void onCreatePreferences(@Nullable Bundle state, @Nullable String rootKey) {
+        setPreferencesFromResource(R.xml.preferences, rootKey);
+        tts = TtsManager.getInstance(requireContext());
+        tts.addReadyListener(readyListener);
+
+        ListPreference voiceMode = findPreference("voice_mode");
+        if (voiceMode != null) {
+            voiceMode.setOnPreferenceChangeListener((preference, value) -> {
+                main.post(() -> {
+                    updateVoiceControls();
+                    tts.refreshPreferences();
+                });
+                return true;
+            });
+        }
+
+        ListPreference voiceName = findPreference("voice_name");
+        if (voiceName != null) {
+            voiceName.setOnPreferenceChangeListener((preference, value) -> {
+                main.post(() -> {
+                    updateVoiceControls();
+                    tts.refreshPreferences();
+                });
+                return true;
+            });
+        }
+
+        Preference speechRate = findPreference("speech_rate");
+        if (speechRate != null) {
+            speechRate.setOnPreferenceChangeListener((preference, value) -> {
+                main.post(tts::refreshPreferences);
+                return true;
+            });
+        }
+        Preference speechPitch = findPreference("speech_pitch");
+        if (speechPitch != null) {
+            speechPitch.setOnPreferenceChangeListener((preference, value) -> {
+                main.post(tts::refreshPreferences);
+                return true;
+            });
+        }
+
+        Preference test = findPreference("test_voice");
+        if (test != null) {
+            test.setOnPreferenceClickListener(preference -> {
+                boolean accepted = tts.speak("你好，我是童识汉字。点击汉字，就可以听到它的读音。");
+                if (!accepted) {
+                    Snackbar.make(requireView(), R.string.tts_unavailable, Snackbar.LENGTH_LONG)
+                            .show();
+                }
+                return true;
+            });
+        }
+
+        Preference theme = findPreference("theme_mode");
+        if (theme != null) {
+            theme.setOnPreferenceChangeListener((preference, value) -> {
+                preference.getSharedPreferences().edit()
+                        .putString("theme_mode", String.valueOf(value))
+                        .apply();
+                ThemeManager.applySavedTheme(requireContext());
+                return true;
+            });
+        }
+
+        Preference dynamic = findPreference("dynamic_color");
+        if (dynamic != null) {
+            dynamic.setOnPreferenceChangeListener((preference, value) -> {
+                requireActivity().recreate();
+                return true;
+            });
+        }
+
+        Preference clear = findPreference("clear_history");
+        if (clear != null) {
+            clear.setOnPreferenceClickListener(preference -> {
+                new UserRepository(requireContext()).clearHistory(() ->
+                        requireActivity().runOnUiThread(() ->
+                                Snackbar.make(requireView(), "查询历史已清除",
+                                        Snackbar.LENGTH_SHORT).show()));
+                return true;
+            });
+        }
+
+        Preference about = findPreference("about");
+        if (about != null) {
+            about.setOnPreferenceClickListener(preference -> {
+                NavHostFragment.findNavController(requireParentFragment())
+                        .navigate(R.id.action_settings_to_about);
+                return true;
+            });
+        }
+
+        updateVoiceControls();
+    }
+
+    @Override
+    public void onDestroy() {
+        main.removeCallbacksAndMessages(null);
+        if (tts != null) {
+            tts.removeReadyListener(readyListener);
+        }
+        super.onDestroy();
+    }
+
+    private void updateVoices() {
+        if (!isAdded()) {
+            return;
+        }
+        ListPreference preference = findPreference("voice_name");
+        if (preference == null) {
+            return;
+        }
+
+        List<Voice> voices = tts.getChineseVoices();
+        CharSequence[] entries = new CharSequence[voices.size()];
+        CharSequence[] values = new CharSequence[voices.size()];
+        for (int index = 0; index < voices.size(); index++) {
+            Voice voice = voices.get(index);
+            entries[index] = tts.describeVoice(voice);
+            values[index] = voice.getName();
+        }
+        preference.setEntries(entries);
+        preference.setEntryValues(values);
+        updateVoiceControls();
+    }
+
+    private void updateVoiceControls() {
+        if (!isAdded() || tts == null) {
+            return;
+        }
+        ListPreference modePreference = findPreference("voice_mode");
+        ListPreference voicePreference = findPreference("voice_name");
+        if (modePreference == null || voicePreference == null) {
+            return;
+        }
+
+        String mode = modePreference.getValue();
+        if (mode == null || mode.trim().isEmpty()) {
+            mode = "auto";
+        }
+        int modeIndex = modePreference.findIndexOfValue(mode);
+        String modeLabel = modeIndex >= 0
+                ? String.valueOf(modePreference.getEntries()[modeIndex])
+                : "自动选择";
+        if (("male".equals(mode) || "female".equals(mode))
+                && !tts.hasRecognizedProfile(mode)) {
+            String requested = "male".equals(mode) ? "成年男声" : "成年女声";
+            modePreference.setSummary("设备未提供可识别的" + requested
+                    + "，将使用最佳中性中文语音");
+        } else {
+            modePreference.setSummary(modeLabel);
+        }
+
+        List<Voice> voices = tts.getChineseVoices();
+        boolean manual = "manual".equals(mode);
+        voicePreference.setEnabled(manual && !voices.isEmpty());
+        if (voices.isEmpty()) {
+            voicePreference.setSummary(R.string.tts_unavailable);
+        } else if (!manual) {
+            voicePreference.setSummary("切换到“手动选择”后可指定设备语音");
+        } else {
+            int selectedIndex = voicePreference.findIndexOfValue(voicePreference.getValue());
+            voicePreference.setSummary(selectedIndex >= 0
+                    ? voicePreference.getEntries()[selectedIndex]
+                    : "请选择一个已安装的中文语音");
+        }
+    }
 }

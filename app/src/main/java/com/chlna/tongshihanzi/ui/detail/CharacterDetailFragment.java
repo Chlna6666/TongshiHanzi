@@ -8,12 +8,14 @@ import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.navigation.fragment.NavHostFragment;
 import androidx.preference.PreferenceManager;
+
 import com.chlna.tongshihanzi.R;
 import com.chlna.tongshihanzi.data.dictionary.CharacterWithDetails;
 import com.chlna.tongshihanzi.data.dictionary.DefinitionEntity;
@@ -28,6 +30,7 @@ import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.progressindicator.CircularProgressIndicator;
 import com.google.android.material.snackbar.Snackbar;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -57,7 +60,8 @@ public final class CharacterDetailFragment extends Fragment {
     public View onCreateView(
             @NonNull LayoutInflater inflater,
             @Nullable ViewGroup container,
-            @Nullable Bundle state) {
+            @Nullable Bundle state
+    ) {
         return inflater.inflate(R.layout.fragment_character_detail, container, false);
     }
 
@@ -104,12 +108,15 @@ public final class CharacterDetailFragment extends Fragment {
         });
         viewModel.error().observe(getViewLifecycleOwner(), message -> {
             progress.setVisibility(View.GONE);
-            if (message != null) Snackbar.make(view, message, Snackbar.LENGTH_LONG).show();
+            if (message != null) {
+                Snackbar.make(view, message, Snackbar.LENGTH_LONG).show();
+            }
         });
 
         Bundle arguments = getArguments();
         int characterId = arguments == null ? -1 : arguments.getInt("characterId", -1);
-        String characterText = arguments == null ? "" : arguments.getString("characterText", "");
+        String characterText = arguments == null
+                ? "" : arguments.getString("characterText", "");
         viewModel.load(characterId, characterText);
     }
 
@@ -128,8 +135,8 @@ public final class CharacterDetailFragment extends Fragment {
             chip.setText(reading.pinyinTone);
             chip.setCheckable(true);
             chip.setTag(reading);
-            chip.setContentDescription("选择读音" + reading.pinyinTone + "并播放示例词");
-            chip.setOnClickListener(value -> select((PronunciationEntity) value.getTag(), true));
+            chip.setContentDescription("选择读音" + reading.pinyinTone);
+            chip.setOnClickListener(value -> select((PronunciationEntity) value.getTag()));
             pronunciations.addView(chip);
             if (selected == null && reading.primary) {
                 chip.setChecked(true);
@@ -185,16 +192,15 @@ public final class CharacterDetailFragment extends Fragment {
         }
     }
 
-    private void select(PronunciationEntity reading, boolean playSample) {
+    private void select(PronunciationEntity reading) {
         selected = reading;
         renderReading();
-        if (playSample && reading.speakWord != null && !reading.speakWord.trim().isEmpty()) {
-            TtsManager.getInstance(requireContext()).speakWord(reading.speakWord);
-        }
     }
 
     private void renderReading() {
-        if (details == null || selected == null) return;
+        if (details == null || selected == null) {
+            return;
+        }
         definitions.removeAllViews();
         List<DefinitionEntity> definitionValues = details.definitions.stream()
                 .filter(value -> value.pronunciationId == selected.id)
@@ -204,11 +210,14 @@ public final class CharacterDetailFragment extends Fragment {
         for (DefinitionEntity definition : definitionValues) {
             TextView item = new TextView(requireContext());
             item.setText((number++) + ". " + definition.text);
-            item.setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodyLarge);
+            item.setTextAppearance(
+                    com.google.android.material.R.style.TextAppearance_Material3_BodyLarge);
             item.setPadding(0, 8, 0, 8);
             definitions.addView(item);
         }
-        if (definitionValues.isEmpty()) addEmpty(definitions, "该读音的释义尚未收录");
+        if (definitionValues.isEmpty()) {
+            addEmpty(definitions, "该读音的释义尚未收录");
+        }
 
         words.removeAllViews();
         List<WordEntity> wordValues = details.words.stream()
@@ -217,8 +226,9 @@ public final class CharacterDetailFragment extends Fragment {
                 .collect(Collectors.toList());
         for (WordEntity word : wordValues) {
             Chip chip = new Chip(requireContext());
-            chip.setText(word.word + (word.pinyin.trim().isEmpty() ? "" : "　" + word.pinyin));
-            chip.setChipIconResource(R.drawable.ic_volume_24);
+            chip.setText(word.word
+                    + (word.pinyin.trim().isEmpty() ? "" : "　" + word.pinyin));
+            chip.setChipIconResource(R.drawable.ic_volume);
             chip.setChipIconVisible(true);
             chip.setCheckable(false);
             chip.setEnsureMinTouchTargetSize(true);
@@ -236,17 +246,21 @@ public final class CharacterDetailFragment extends Fragment {
     }
 
     private void speakCharacter() {
-        if (details == null) return;
+        if (details == null) {
+            return;
+        }
         boolean accepted = TtsManager.getInstance(requireContext())
                 .speakCharacter(details.character.character);
         if (!accepted) {
-            Toast.makeText(requireContext(), R.string.tts_unavailable, Toast.LENGTH_SHORT).show();
+            Toast.makeText(requireContext(), R.string.tts_unavailable, Toast.LENGTH_SHORT)
+                    .show();
         }
     }
 
     private static String joinPinyin(List<PronunciationEntity> values) {
         return values.stream().map(value -> value.pinyinTone)
-                .reduce((first, second) -> first + "、" + second).orElse("待补充");
+                .reduce((first, second) -> first + "、" + second)
+                .orElse("待补充");
     }
 
     private static String empty(String value) {

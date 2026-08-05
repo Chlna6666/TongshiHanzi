@@ -8,8 +8,10 @@ import android.os.Looper;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.Voice;
 import android.util.Log;
+
 import androidx.annotation.Nullable;
 import androidx.preference.PreferenceManager;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -37,14 +39,18 @@ public final class TtsManager {
     public static TtsManager getInstance(Context context) {
         if (instance == null) {
             synchronized (TtsManager.class) {
-                if (instance == null) instance = new TtsManager(context);
+                if (instance == null) {
+                    instance = new TtsManager(context);
+                }
             }
         }
         return instance;
     }
 
     public synchronized void initialize() {
-        if (ready || initializing) return;
+        if (ready || initializing) {
+            return;
+        }
         initializing = true;
         main.post(() -> tts = new TextToSpeech(context, status -> {
             initializing = false;
@@ -61,7 +67,9 @@ public final class TtsManager {
             int language = tts.setLanguage(Locale.SIMPLIFIED_CHINESE);
             ready = language != TextToSpeech.LANG_MISSING_DATA
                     && language != TextToSpeech.LANG_NOT_SUPPORTED;
-            if (ready) applyPreferences();
+            if (ready) {
+                applyPreferences();
+            }
             notifyReadyListeners();
         }));
     }
@@ -72,22 +80,49 @@ public final class TtsManager {
 
     public void addReadyListener(Runnable listener) {
         readyListeners.add(listener);
-        if (ready || (!initializing && tts != null)) main.post(listener);
-        else initialize();
+        if (ready || (!initializing && tts != null)) {
+            main.post(listener);
+        } else {
+            initialize();
+        }
+    }
+
+    public void removeReadyListener(Runnable listener) {
+        readyListeners.remove(listener);
     }
 
     public List<Voice> getChineseVoices() {
-        if (!ready || tts == null) return Collections.emptyList();
+        if (!ready || tts == null) {
+            return Collections.emptyList();
+        }
         Set<Voice> all = tts.getVoices();
-        if (all == null) return Collections.emptyList();
+        if (all == null) {
+            return Collections.emptyList();
+        }
         List<Voice> result = new ArrayList<>();
         for (Voice voice : all) {
             Locale locale = voice.getLocale();
-            if (locale != null && "zh".equalsIgnoreCase(locale.getLanguage())) result.add(voice);
+            if (locale != null && "zh".equalsIgnoreCase(locale.getLanguage())) {
+                result.add(voice);
+            }
         }
-        result.sort(Comparator.comparing((Voice v) -> v.getLocale().toLanguageTag())
+        result.sort(Comparator.comparing((Voice voice) -> voice.getLocale().toLanguageTag())
                 .thenComparing(Voice::getName));
         return result;
+    }
+
+    public String describeVoice(Voice voice) {
+        return VoiceProfileRegistry.describe(voice);
+    }
+
+    public boolean hasRecognizedProfile(String mode) {
+        return VoiceProfileRegistry.hasProfile(getChineseVoices(), mode);
+    }
+
+    public void refreshPreferences() {
+        if (ready && tts != null) {
+            main.post(this::applyPreferences);
+        }
     }
 
     /** Speaks exactly one displayed Han character; it never substitutes a sample word. */
@@ -106,7 +141,9 @@ public final class TtsManager {
     }
 
     public void stop() {
-        if (tts != null) tts.stop();
+        if (tts != null) {
+            tts.stop();
+        }
     }
 
     public synchronized void shutdown() {
@@ -125,7 +162,9 @@ public final class TtsManager {
     }
 
     private boolean speakInternal(String text, String type) {
-        if (text.isEmpty()) return false;
+        if (text.isEmpty()) {
+            return false;
+        }
         if (!ready || tts == null) {
             initialize();
             return false;
@@ -138,7 +177,9 @@ public final class TtsManager {
     }
 
     private void applyPreferences() {
-        if (tts == null) return;
+        if (tts == null) {
+            return;
+        }
         android.content.SharedPreferences preferences =
                 PreferenceManager.getDefaultSharedPreferences(context);
         tts.setSpeechRate(preferences.getInt("speech_rate", 90) / 100f);
@@ -148,22 +189,32 @@ public final class TtsManager {
         String mode = preferences.getString("voice_mode", "auto");
         String selected = preferences.getString("voice_name", "");
         Voice voice = null;
-        if ("manual".equals(mode) || !selected.trim().isEmpty()) {
+
+        if ("manual".equals(mode) && !selected.trim().isEmpty()) {
             for (Voice candidate : voices) {
                 if (candidate.getName().equals(selected)) {
                     voice = candidate;
                     break;
                 }
             }
-        }
-        if (voice == null && ("male".equals(mode) || "female".equals(mode))) {
+        } else if ("male".equals(mode) || "female".equals(mode)) {
             voice = VoiceProfileRegistry.select(voices, mode);
         }
-        if (voice == null && !voices.isEmpty()) voice = voices.get(0);
-        if (voice != null) tts.setVoice(voice);
+
+        if (voice == null) {
+            voice = VoiceProfileRegistry.selectAutomatic(voices);
+        }
+        if (voice != null) {
+            int status = tts.setVoice(voice);
+            if (status != TextToSpeech.SUCCESS) {
+                Log.w(TAG, "Unable to select TTS voice: " + voice.getName());
+            }
+        }
     }
 
     private void notifyReadyListeners() {
-        for (Runnable listener : readyListeners) main.post(listener);
+        for (Runnable listener : readyListeners) {
+            main.post(listener);
+        }
     }
 }
