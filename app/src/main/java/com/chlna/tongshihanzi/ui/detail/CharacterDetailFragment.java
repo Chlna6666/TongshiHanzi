@@ -1,12 +1,242 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 package com.chlna.tongshihanzi.ui.detail;
 
-import android.os.Bundle;import android.view.LayoutInflater;import android.view.View;import android.view.ViewGroup;import android.widget.LinearLayout;import android.widget.TextView;import android.widget.Toast;import androidx.annotation.NonNull;import androidx.annotation.Nullable;import androidx.fragment.app.Fragment;import androidx.lifecycle.ViewModelProvider;import androidx.navigation.fragment.NavHostFragment;import androidx.preference.PreferenceManager;import com.chlna.tongshihanzi.R;import com.chlna.tongshihanzi.data.dictionary.CharacterWithDetails;import com.chlna.tongshihanzi.data.dictionary.DefinitionEntity;import com.chlna.tongshihanzi.data.dictionary.PronunciationEntity;import com.chlna.tongshihanzi.data.dictionary.WordEntity;import com.chlna.tongshihanzi.speech.TtsManager;import com.google.android.material.appbar.MaterialToolbar;import com.google.android.material.button.MaterialButton;import com.google.android.material.chip.Chip;import com.google.android.material.chip.ChipGroup;import com.google.android.material.progressindicator.CircularProgressIndicator;import com.google.android.material.snackbar.Snackbar;import java.util.Comparator;import java.util.List;import java.util.stream.Collectors;
-public final class CharacterDetailFragment extends Fragment{
-    private DetailViewModel viewModel;private CharacterWithDetails details;private PronunciationEntity selected;private TextView character,basicInfo,professionalInfo,strokeText,source;private LinearLayout definitions;private ChipGroup pronunciations,words;private StrokeOrderView strokeView;private MaterialButton favorite;private CircularProgressIndicator progress;private boolean autoSpoken;
-    @Nullable @Override public View onCreateView(@NonNull LayoutInflater inflater,@Nullable ViewGroup container,@Nullable Bundle state){return inflater.inflate(R.layout.fragment_character_detail,container,false);}
-    @Override public void onViewCreated(@NonNull View view,@Nullable Bundle state){viewModel=new ViewModelProvider(this).get(DetailViewModel.class);character=view.findViewById(R.id.character);basicInfo=view.findViewById(R.id.basic_info);professionalInfo=view.findViewById(R.id.professional_info);definitions=view.findViewById(R.id.definition_container);pronunciations=view.findViewById(R.id.pronunciations);words=view.findViewById(R.id.word_container);strokeView=view.findViewById(R.id.stroke_view);strokeText=view.findViewById(R.id.stroke_text);source=view.findViewById(R.id.source);favorite=view.findViewById(R.id.favorite_button);progress=view.findViewById(R.id.progress);((MaterialToolbar)view.findViewById(R.id.toolbar)).setNavigationOnClickListener(v->NavHostFragment.findNavController(this).navigateUp());view.findViewById(R.id.speak_button).setOnClickListener(v->speak());favorite.setOnClickListener(v->viewModel.toggleFavorite());strokeView.setStepListener((index,name)->strokeText.setText(index<0?name:"第 "+(index+1)+" 笔："+name+"　（点击重新播放）"));viewModel.character().observe(getViewLifecycleOwner(),value->{progress.setVisibility(View.GONE);if(value==null){Snackbar.make(view,"未找到该汉字",Snackbar.LENGTH_LONG).show();return;}details=value;render();});viewModel.favorite().observe(getViewLifecycleOwner(),value->{boolean saved=Boolean.TRUE.equals(value);favorite.setText(saved?R.string.unfavorite:R.string.favorite);favorite.setChecked(saved);});viewModel.error().observe(getViewLifecycleOwner(),message->{progress.setVisibility(View.GONE);if(message!=null)Snackbar.make(view,message,Snackbar.LENGTH_LONG).show();});viewModel.load(getArguments()==null?-1:getArguments().getInt("characterId",-1));}
-    private void render(){character.setText(details.character.character);List<PronunciationEntity> readings=details.pronunciations.stream().sorted(Comparator.comparingInt(v->v.displayOrder)).collect(Collectors.toList());pronunciations.removeAllViews();for(PronunciationEntity reading:readings){Chip chip=new Chip(requireContext());chip.setText(reading.pinyinTone);chip.setCheckable(true);chip.setTag(reading);chip.setOnClickListener(v->select((PronunciationEntity)v.getTag()));pronunciations.addView(chip);if(selected==null&&reading.primary){chip.setChecked(true);selected=reading;}}if(selected==null&&!readings.isEmpty()){selected=readings.get(0);((Chip)pronunciations.getChildAt(0)).setChecked(true);}String traditional=details.character.traditional.equals(details.character.character)?"同简体":details.character.traditional;String wubi=details.wubiCodes.isEmpty()?"—":details.wubiCodes.get(0).code;basicInfo.setText("拼音："+joinPinyin(readings)+"\n部首："+details.character.radical+"\n总笔画："+details.character.totalStrokes+"\n字形结构："+details.character.structure+"\n繁体字："+traditional+"\n五笔 86："+wubi);professionalInfo.setText("Unicode："+details.character.unicodeCodepoint+"\n笔顺编号："+empty(details.character.strokeNumber)+"\n常用字："+(details.character.common?"是":"否")+"\n频率排序："+details.character.frequencyRank);source.setText("数据来源标识："+details.character.sourceId+" · 具体许可请查看设置中的关于页面");strokeView.setData(details.character.character,details.strokes.stream().sorted(Comparator.comparingInt(v->v.strokeIndex)).map(v->v.name).collect(Collectors.toList()));renderReading();if(PreferenceManager.getDefaultSharedPreferences(requireContext()).getBoolean("auto_speak",false)&&!autoSpoken){autoSpoken=true;speak();}}
-    private void select(PronunciationEntity reading){selected=reading;renderReading();TtsManager.getInstance(requireContext()).speak(reading.speakWord);}private void renderReading(){if(details==null||selected==null)return;definitions.removeAllViews();List<DefinitionEntity> defs=details.definitions.stream().filter(v->v.pronunciationId==selected.id).sorted(Comparator.comparingInt(v->v.displayOrder)).collect(Collectors.toList());int n=1;for(DefinitionEntity d:defs){TextView item=new TextView(requireContext());item.setText((n++)+". "+d.text);item.setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodyLarge);item.setPadding(0,8,0,8);definitions.addView(item);}if(defs.isEmpty())addEmpty(definitions,"该读音的释义尚未收录");words.removeAllViews();List<WordEntity> list=details.words.stream().filter(v->v.pronunciationId==selected.id).sorted(Comparator.comparingInt(v->v.displayOrder)).collect(Collectors.toList());for(WordEntity word:list){Chip chip=new Chip(requireContext());chip.setText(word.word+(word.pinyin.trim().isEmpty()?"":"　"+word.pinyin));chip.setOnClickListener(v->TtsManager.getInstance(requireContext()).speak(word.word));words.addView(chip);}if(list.isEmpty()){Chip chip=new Chip(requireContext());chip.setText("暂无组词");chip.setEnabled(false);words.addView(chip);}}
-    private void speak(){if(details==null)return;String text=selected==null||selected.speakWord.trim().isEmpty()?details.character.character:selected.speakWord;if(!TtsManager.getInstance(requireContext()).speak(text))Toast.makeText(requireContext(),R.string.tts_unavailable,Toast.LENGTH_SHORT).show();}private static String joinPinyin(List<PronunciationEntity> values){return values.stream().map(v->v.pinyinTone).reduce((a,b)->a+"、"+b).orElse("—");}private static String empty(String v){return v==null||v.trim().isEmpty()?"—":v;}private static void addEmpty(LinearLayout c,String text){TextView v=new TextView(c.getContext());v.setText(text);v.setPadding(0,8,0,8);c.addView(v);}
+import android.os.Bundle;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import android.widget.Toast;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.fragment.app.Fragment;
+import androidx.lifecycle.ViewModelProvider;
+import androidx.navigation.fragment.NavHostFragment;
+import androidx.preference.PreferenceManager;
+import com.chlna.tongshihanzi.R;
+import com.chlna.tongshihanzi.data.dictionary.CharacterWithDetails;
+import com.chlna.tongshihanzi.data.dictionary.DefinitionEntity;
+import com.chlna.tongshihanzi.data.dictionary.PronunciationEntity;
+import com.chlna.tongshihanzi.data.dictionary.StrokeEntity;
+import com.chlna.tongshihanzi.data.dictionary.WordEntity;
+import com.chlna.tongshihanzi.speech.TtsManager;
+import com.google.android.material.appbar.MaterialToolbar;
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.chip.Chip;
+import com.google.android.material.chip.ChipGroup;
+import com.google.android.material.progressindicator.CircularProgressIndicator;
+import com.google.android.material.snackbar.Snackbar;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.stream.Collectors;
+
+public final class CharacterDetailFragment extends Fragment {
+    private DetailViewModel viewModel;
+    private CharacterWithDetails details;
+    private PronunciationEntity selected;
+    private TextView character;
+    private TextView basicInfo;
+    private TextView professionalInfo;
+    private TextView strokeText;
+    private TextView source;
+    private LinearLayout definitions;
+    private ChipGroup pronunciations;
+    private ChipGroup words;
+    private StrokeOrderView strokeView;
+    private MaterialButton favorite;
+    private CircularProgressIndicator progress;
+    private boolean autoSpoken;
+
+    @Nullable
+    @Override
+    public View onCreateView(
+            @NonNull LayoutInflater inflater,
+            @Nullable ViewGroup container,
+            @Nullable Bundle state) {
+        return inflater.inflate(R.layout.fragment_character_detail, container, false);
+    }
+
+    @Override
+    public void onViewCreated(@NonNull View view, @Nullable Bundle state) {
+        viewModel = new ViewModelProvider(this).get(DetailViewModel.class);
+        character = view.findViewById(R.id.character);
+        basicInfo = view.findViewById(R.id.basic_info);
+        professionalInfo = view.findViewById(R.id.professional_info);
+        definitions = view.findViewById(R.id.definition_container);
+        pronunciations = view.findViewById(R.id.pronunciations);
+        words = view.findViewById(R.id.word_container);
+        strokeView = view.findViewById(R.id.stroke_view);
+        strokeText = view.findViewById(R.id.stroke_text);
+        source = view.findViewById(R.id.source);
+        favorite = view.findViewById(R.id.favorite_button);
+        progress = view.findViewById(R.id.progress);
+
+        ((MaterialToolbar) view.findViewById(R.id.toolbar)).setNavigationOnClickListener(
+                ignored -> NavHostFragment.findNavController(this).navigateUp());
+        view.findViewById(R.id.speak_button).setOnClickListener(ignored -> speakCharacter());
+        favorite.setOnClickListener(ignored -> viewModel.toggleFavorite());
+        strokeView.setStepListener((index, name) -> {
+            if (index >= 0 && details != null && index < details.strokes.size()) {
+                strokeText.setText("第 " + (index + 1) + " 笔：" + name);
+            } else {
+                strokeText.setText(name);
+            }
+        });
+
+        viewModel.character().observe(getViewLifecycleOwner(), value -> {
+            progress.setVisibility(View.GONE);
+            if (value == null) {
+                Snackbar.make(view, "未找到该汉字", Snackbar.LENGTH_LONG).show();
+                return;
+            }
+            details = value;
+            render();
+        });
+        viewModel.favorite().observe(getViewLifecycleOwner(), value -> {
+            boolean saved = Boolean.TRUE.equals(value);
+            favorite.setText(saved ? R.string.unfavorite : R.string.favorite);
+            favorite.setChecked(saved);
+        });
+        viewModel.error().observe(getViewLifecycleOwner(), message -> {
+            progress.setVisibility(View.GONE);
+            if (message != null) Snackbar.make(view, message, Snackbar.LENGTH_LONG).show();
+        });
+        int characterId = getArguments() == null
+                ? -1 : getArguments().getInt("characterId", -1);
+        viewModel.load(characterId);
+    }
+
+    private void render() {
+        character.setText(details.character.character);
+        character.setContentDescription("汉字" + details.character.character);
+        List<PronunciationEntity> readings = details.pronunciations.stream()
+                .sorted(Comparator.comparingInt(value -> value.displayOrder))
+                .collect(Collectors.toList());
+        pronunciations.removeAllViews();
+        selected = null;
+        for (PronunciationEntity reading : readings) {
+            Chip chip = new Chip(requireContext());
+            chip.setText(reading.pinyinTone);
+            chip.setCheckable(true);
+            chip.setTag(reading);
+            chip.setContentDescription("选择读音" + reading.pinyinTone + "并播放示例词");
+            chip.setOnClickListener(value -> select((PronunciationEntity) value.getTag(), true));
+            pronunciations.addView(chip);
+            if (selected == null && reading.primary) {
+                chip.setChecked(true);
+                selected = reading;
+            }
+        }
+        if (selected == null && !readings.isEmpty()) {
+            selected = readings.get(0);
+            ((Chip) pronunciations.getChildAt(0)).setChecked(true);
+        }
+
+        String traditional = details.character.traditional.equals(details.character.character)
+                ? "同简体" : details.character.traditional;
+        String wubi = details.wubiCodes.isEmpty() ? "—" : details.wubiCodes.get(0).code;
+        basicInfo.setText(
+                "拼音：" + joinPinyin(readings)
+                        + "\n部首：" + details.character.radical
+                        + "\n总笔画：" + details.character.totalStrokes
+                        + "\n字形结构：" + details.character.structure
+                        + "\n繁体字：" + traditional
+                        + "\n五笔 86：" + wubi);
+        professionalInfo.setText(
+                "Unicode：" + details.character.unicodeCodepoint
+                        + "\n笔顺编号：" + empty(details.character.strokeNumber)
+                        + "\n常用字：" + (details.character.common ? "是" : "否")
+                        + "\n频率排序：" + details.character.frequencyRank);
+        source.setText(
+                "数据来源标识：" + details.character.sourceId
+                        + " · 矢量笔顺来自构建时锁定的数据版本，许可详见关于页面");
+
+        List<StrokeEntity> sortedStrokes = new ArrayList<>(details.strokes);
+        sortedStrokes.sort(Comparator.comparingInt(value -> value.strokeIndex));
+        strokeView.setData(details.character.character, sortedStrokes);
+        renderReading();
+
+        if (PreferenceManager.getDefaultSharedPreferences(requireContext())
+                .getBoolean("auto_speak", false) && !autoSpoken) {
+            autoSpoken = true;
+            speakCharacter();
+        }
+    }
+
+    private void select(PronunciationEntity reading, boolean playSample) {
+        selected = reading;
+        renderReading();
+        if (playSample && reading.speakWord != null && !reading.speakWord.trim().isEmpty()) {
+            TtsManager.getInstance(requireContext()).speakWord(reading.speakWord);
+        }
+    }
+
+    private void renderReading() {
+        if (details == null || selected == null) return;
+        definitions.removeAllViews();
+        List<DefinitionEntity> definitionValues = details.definitions.stream()
+                .filter(value -> value.pronunciationId == selected.id)
+                .sorted(Comparator.comparingInt(value -> value.displayOrder))
+                .collect(Collectors.toList());
+        int number = 1;
+        for (DefinitionEntity definition : definitionValues) {
+            TextView item = new TextView(requireContext());
+            item.setText((number++) + ". " + definition.text);
+            item.setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodyLarge);
+            item.setPadding(0, 8, 0, 8);
+            definitions.addView(item);
+        }
+        if (definitionValues.isEmpty()) addEmpty(definitions, "该读音的释义尚未收录");
+
+        words.removeAllViews();
+        List<WordEntity> wordValues = details.words.stream()
+                .filter(value -> value.pronunciationId == selected.id)
+                .sorted(Comparator.comparingInt(value -> value.displayOrder))
+                .collect(Collectors.toList());
+        for (WordEntity word : wordValues) {
+            Chip chip = new Chip(requireContext());
+            chip.setText(word.word + (word.pinyin.trim().isEmpty() ? "" : "　" + word.pinyin));
+            chip.setChipIconResource(R.drawable.ic_volume_24);
+            chip.setChipIconVisible(true);
+            chip.setCheckable(false);
+            chip.setEnsureMinTouchTargetSize(true);
+            chip.setContentDescription("朗读词语" + word.word);
+            chip.setOnClickListener(ignored ->
+                    TtsManager.getInstance(requireContext()).speakWord(word.word));
+            words.addView(chip);
+        }
+        if (wordValues.isEmpty()) {
+            Chip chip = new Chip(requireContext());
+            chip.setText("暂无组词");
+            chip.setEnabled(false);
+            words.addView(chip);
+        }
+    }
+
+    private void speakCharacter() {
+        if (details == null) return;
+        boolean accepted = TtsManager.getInstance(requireContext())
+                .speakCharacter(details.character.character);
+        if (!accepted) {
+            Toast.makeText(requireContext(), R.string.tts_unavailable, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private static String joinPinyin(List<PronunciationEntity> values) {
+        return values.stream().map(value -> value.pinyinTone)
+                .reduce((first, second) -> first + "、" + second).orElse("—");
+    }
+
+    private static String empty(String value) {
+        return value == null || value.trim().isEmpty() ? "—" : value;
+    }
+
+    private static void addEmpty(LinearLayout container, String text) {
+        TextView value = new TextView(container.getContext());
+        value.setText(text);
+        value.setPadding(0, 8, 0, 8);
+        container.addView(value);
+    }
 }
