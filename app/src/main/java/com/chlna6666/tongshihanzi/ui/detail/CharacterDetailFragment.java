@@ -24,6 +24,7 @@ import com.chlna6666.tongshihanzi.data.dictionary.StrokeEntity;
 import com.chlna6666.tongshihanzi.data.dictionary.WordEntity;
 import com.chlna6666.tongshihanzi.data.stroke.StrokePackRepository;
 import com.chlna6666.tongshihanzi.speech.TtsManager;
+import com.chlna6666.tongshihanzi.util.MotionEffects;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.chip.Chip;
@@ -67,6 +68,7 @@ public final class CharacterDetailFragment extends Fragment {
 
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle state) {
+        MotionEffects.enterPage(view);
         viewModel = new ViewModelProvider(this).get(DetailViewModel.class);
         character = view.findViewById(R.id.character);
         basicInfo = view.findViewById(R.id.basic_info);
@@ -82,7 +84,10 @@ public final class CharacterDetailFragment extends Fragment {
 
         ((MaterialToolbar) view.findViewById(R.id.toolbar)).setNavigationOnClickListener(
                 ignored -> NavHostFragment.findNavController(this).navigateUp());
-        view.findViewById(R.id.speak_button).setOnClickListener(ignored -> speakCharacter());
+        View speak = view.findViewById(R.id.speak_button);
+        MotionEffects.installPressFeedback(speak);
+        MotionEffects.installPressFeedback(favorite);
+        speak.setOnClickListener(ignored -> speakCharacter());
         favorite.setOnClickListener(ignored -> viewModel.toggleFavorite());
         strokeView.setStepListener((index, name) -> {
             if (index >= 0 && index < renderedStrokes.size()) {
@@ -137,6 +142,7 @@ public final class CharacterDetailFragment extends Fragment {
             chip.setTag(reading);
             chip.setContentDescription("选择读音" + reading.pinyinTone);
             chip.setOnClickListener(value -> select((PronunciationEntity) value.getTag()));
+            MotionEffects.installPressFeedback(chip);
             pronunciations.addView(chip);
             if (selected == null && reading.primary) {
                 chip.setChecked(true);
@@ -235,6 +241,7 @@ public final class CharacterDetailFragment extends Fragment {
             chip.setContentDescription("朗读词语" + word.word);
             chip.setOnClickListener(ignored ->
                     TtsManager.getInstance(requireContext()).speakWord(word.word));
+            MotionEffects.installPressFeedback(chip);
             words.addView(chip);
         }
         if (wordValues.isEmpty()) {

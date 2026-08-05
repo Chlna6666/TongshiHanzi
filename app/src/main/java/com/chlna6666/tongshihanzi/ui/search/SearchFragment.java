@@ -20,6 +20,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.chlna6666.tongshihanzi.R;
 import com.chlna6666.tongshihanzi.domain.search.SearchMode;
 import com.chlna6666.tongshihanzi.domain.search.SearchResult;
+import com.chlna6666.tongshihanzi.util.MotionEffects;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.google.android.material.snackbar.Snackbar;
@@ -58,12 +59,14 @@ public final class SearchFragment extends Fragment {
 
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle state) {
+        MotionEffects.enterPage(view);
         viewModel = new ViewModelProvider(this).get(SearchViewModel.class);
         RecyclerView results = view.findViewById(R.id.results);
         emptyState = view.findViewById(R.id.empty_state);
         emptyTitle = view.findViewById(R.id.empty_title);
         progress = view.findViewById(R.id.progress);
         adapter = new SearchResultAdapter(this::openDetail);
+        results.setItemAnimator(null);
         results.setAdapter(adapter);
 
         TextInputEditText input = view.findViewById(R.id.search_input);
@@ -94,6 +97,7 @@ public final class SearchFragment extends Fragment {
         });
 
         ChipGroup modes = view.findViewById(R.id.mode_group);
+        MotionEffects.installPressFeedbackForChildren(modes);
         modes.setOnCheckedStateChangeListener((group, ids) -> {
             if (ids.isEmpty()) {
                 return;

@@ -5,6 +5,7 @@ import android.content.res.Configuration;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.view.View;
+
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -14,14 +15,27 @@ import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.navigation.NavController;
 import androidx.navigation.fragment.NavHostFragment;
 import androidx.navigation.ui.NavigationUI;
+
 import com.chlna6666.tongshihanzi.R;
+import com.chlna6666.tongshihanzi.util.MotionEffects;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
-/** Hosts the application's navigation graph and owns system-bar inset handling. */
+/** Hosts navigation, system-bar insets and the interruptible bottom-bar transition. */
 public final class MainActivity extends AppCompatActivity {
     private View navHost;
     private BottomNavigationView bottomNavigation;
     private int systemBottomInset;
+    private int bottomNavigationHeight;
+    private boolean rootDestination = true;
+
+    private int hostLeft;
+    private int hostTop;
+    private int hostRight;
+    private int hostBottom;
+    private int navLeft;
+    private int navTop;
+    private int navRight;
+    private int navBottom;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -33,59 +47,100 @@ public final class MainActivity extends AppCompatActivity {
 
         navHost = findViewById(R.id.nav_host_fragment);
         bottomNavigation = findViewById(R.id.bottom_navigation);
+        captureBasePadding();
         applySystemBarAppearance();
         installInsets();
+        installBottomNavigationMotion();
 
         NavHostFragment host = (NavHostFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.nav_host_fragment);
-        if (host == null) throw new IllegalStateException("Navigation host missing");
+        if (host == null) {
+            throw new IllegalStateException("Navigation host missing");
+        }
 
         NavController controller = host.getNavController();
         NavigationUI.setupWithNavController(bottomNavigation, controller);
         controller.addOnDestinationChangedListener((navController, destination, arguments) -> {
             int id = destination.getId();
-            boolean root = id == R.id.searchFragment
+            rootDestination = id == R.id.searchFragment
                     || id == R.id.favoritesFragment
                     || id == R.id.settingsFragment;
-            bottomNavigation.setVisibility(root ? View.VISIBLE : View.GONE);
-            updateNavHostBottomPadding(root ? 0 : systemBottomInset);
+            updateNavHostBottomPadding();
+            MotionEffects.setBottomBarVisible(
+                    bottomNavigation,
+                    rootDestination,
+                    bottomNavigationHeight);
         });
     }
 
-    private void installInsets() {
-        final int hostLeft = navHost.getPaddingLeft();
-        final int hostTop = navHost.getPaddingTop();
-        final int hostRight = navHost.getPaddingRight();
-        final int hostBottom = navHost.getPaddingBottom();
-        final int navLeft = bottomNavigation.getPaddingLeft();
-        final int navTop = bottomNavigation.getPaddingTop();
-        final int navRight = bottomNavigation.getPaddingRight();
-        final int navBottom = bottomNavigation.getPaddingBottom();
+    private void captureBasePadding() {
+        hostLeft = navHost.getPaddingLeft();
+        hostTop = navHost.getPaddingTop();
+        hostRight = navHost.getPaddingRight();
+        hostBottom = navHost.getPaddingBottom();
+        navLeft = bottomNavigation.getPaddingLeft();
+        navTop = bottomNavigation.getPaddingTop();
+        navRight = bottomNavigation.getPaddingRight();
+        navBottom = bottomNavigation.getPaddingBottom();
+    }
 
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main_root), (view, windowInsets) -> {
+    private void installInsets() {
+        View root = findViewById(R.id.main_root);
+        ViewCompat.setOnApplyWindowInsetsListener(root, (view, windowInsets) -> {
             Insets bars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars());
             systemBottomInset = bars.bottom;
             navHost.setPadding(
                     hostLeft + bars.left,
                     hostTop + bars.top,
                     hostRight + bars.right,
-                    hostBottom + (bottomNavigation.getVisibility() == View.GONE ? bars.bottom : 0));
+                    navHost.getPaddingBottom());
             bottomNavigation.setPadding(
                     navLeft + bars.left,
                     navTop,
                     navRight + bars.right,
                     navBottom + bars.bottom);
+            bottomNavigation.post(() -> {
+                bottomNavigationHeight = bottomNavigation.getHeight();
+                updateNavHostBottomPadding();
+            });
+            updateNavHostBottomPadding();
             return windowInsets;
         });
-        ViewCompat.requestApplyInsets(findViewById(R.id.main_root));
+        ViewCompat.requestApplyInsets(root);
     }
 
-    private void updateNavHostBottomPadding(int bottom) {
+    private void installBottomNavigationMotion() {
+        bottomNavigation.addOnLayoutChangeListener((view, left, top, right, bottom,
+                                                    oldLeft, oldTop, oldRight, oldBottom) -> {
+            int measured = bottom - top;
+            if (measured != bottomNavigationHeight) {
+                bottomNavigationHeight = measured;
+                updateNavHostBottomPadding();
+            }
+        });
+        bottomNavigation.post(() -> {
+            for (int index = 0; index < bottomNavigation.getMenu().size(); index++) {
+                int itemId = bottomNavigation.getMenu().getItem(index).getItemId();
+                View item = bottomNavigation.findViewById(itemId);
+                if (item != null) {
+                    MotionEffects.installPressFeedback(item);
+                }
+            }
+        });
+    }
+
+    private void updateNavHostBottomPadding() {
+        if (navHost == null) {
+            return;
+        }
+        int bottom = rootDestination
+                ? Math.max(bottomNavigationHeight, systemBottomInset)
+                : systemBottomInset;
         navHost.setPadding(
                 navHost.getPaddingLeft(),
                 navHost.getPaddingTop(),
                 navHost.getPaddingRight(),
-                bottom);
+                hostBottom + bottom);
     }
 
     private void applySystemBarAppearance() {

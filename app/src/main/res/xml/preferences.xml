@@ -73,6 +73,15 @@
             app:iconSpaceReserved="false" />
 
         <ListPreference
+            android:key="motion_mode"
+            android:defaultValue="full"
+            android:entries="@array/motion_entries"
+            android:entryValues="@array/motion_values"
+            android:summary="页面与控件使用可打断弹簧反馈；不包含悬浮或循环动画"
+            android:title="界面动效"
+            app:iconSpaceReserved="false" />
+
+        <ListPreference
             android:key="font_scale"
             android:defaultValue="normal"
             android:entries="@array/font_entries"

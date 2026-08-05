@@ -18,6 +18,7 @@ import androidx.navigation.fragment.NavHostFragment;
 
 import com.chlna6666.tongshihanzi.BuildConfig;
 import com.chlna6666.tongshihanzi.R;
+import com.chlna6666.tongshihanzi.util.MotionEffects;
 import com.google.android.material.appbar.MaterialToolbar;
 
 import org.json.JSONObject;
@@ -50,6 +51,7 @@ public final class AboutFragment extends Fragment {
 
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle state) {
+        MotionEffects.enterPage(view);
         ((MaterialToolbar) view.findViewById(R.id.toolbar))
                 .setNavigationOnClickListener(ignored ->
                         NavHostFragment.findNavController(this).navigateUp());
@@ -57,10 +59,12 @@ public final class AboutFragment extends Fragment {
         ((TextView) view.findViewById(R.id.version)).setText(
                 "版本 " + BuildConfig.VERSION_NAME + "（" + BuildConfig.VERSION_CODE + "）");
 
-        view.findViewById(R.id.source_button)
-                .setOnClickListener(ignored -> openUrl(PROJECT_URL));
-        view.findViewById(R.id.profile_button)
-                .setOnClickListener(ignored -> openUrl(PROFILE_URL));
+        View sourceButton = view.findViewById(R.id.source_button);
+        View profileButton = view.findViewById(R.id.profile_button);
+        MotionEffects.installPressFeedback(sourceButton);
+        MotionEffects.installPressFeedback(profileButton);
+        sourceButton.setOnClickListener(ignored -> openUrl(PROJECT_URL));
+        profileButton.setOnClickListener(ignored -> openUrl(PROFILE_URL));
 
         TextView dataVersion = view.findViewById(R.id.data_version);
         dataVersion.setText(readDataSummary());
