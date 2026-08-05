@@ -8,14 +8,16 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5
@@ -41,8 +43,42 @@ jobs:
           gradle --version
           sdkmanager --list_installed
 
-      - name: Validate dictionary seed
+      - name: Validate reviewed dictionary seed
         run: gradle --stacktrace :dict-builder:test :dict-builder:run --args="$GITHUB_WORKSPACE/app/src/main/assets/dictionary/dictionary_seed.json"
+
+      - name: Generate pinned full offline dictionary
+        run: python3 tools/sync_mapull_dictionary.py
+
+      - name: Verify full dictionary manifest
+        run: |
+          python3 - <<'PY'
+          import gzip, json
+          from pathlib import Path
+          manifest = json.loads(Path('app/src/main/assets/dictionary/full_dictionary_manifest.json').read_text(encoding='utf-8'))
+          count = 0
+          with gzip.open('app/src/main/assets/dictionary/full_dictionary.ndjson.gz', 'rt', encoding='utf-8') as source:
+              for line in source:
+                  if line.strip():
+                      json.loads(line)
+                      count += 1
+          assert count == manifest['characterCount'], (count, manifest['characterCount'])
+          assert count >= 8000, count
+          print(f"Verified {count} bundled characters from {manifest['sourceCommit']}")
+          PY
+
+      - name: Persist generated dictionary assets
+        if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
+        run: |
+          git add app/src/main/assets/dictionary/full_dictionary.ndjson.gz
+          git add app/src/main/assets/dictionary/full_dictionary_manifest.json
+          if git diff --cached --quiet; then
+            echo 'Dictionary assets are already current.'
+          else
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'data: refresh bundled full dictionary [skip ci]'
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
 
       - name: Generate offline stroke vectors
         run: python3 tools/generate_stroke_vectors.py --strict
@@ -57,4 +93,5 @@ jobs:
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             app/build/outputs/apk/release/app-release-unsigned.apk
+            app/src/main/assets/dictionary/full_dictionary_manifest.json
           if-no-files-found: error
