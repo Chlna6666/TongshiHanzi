@@ -96,7 +96,10 @@ jobs:
           PY
 
       - name: Export Room schema v4
-        run: gradle --stacktrace :app:compileDebugJavaWithJavac
+        run: |
+          rm -rf app/schemas
+          gradle --stacktrace --rerun-tasks :app:compileDebugJavaWithJavac
+          test -f app/schemas/com.chlna.tongshihanzi.data.dictionary.DictionaryDatabase/4.json
 
       - name: Build prepopulated dictionary database
         run: python3 tools/build_prebuilt_dictionary.py --version 4
@@ -193,4 +196,5 @@ jobs:
             app/build/outputs/apk/release/app-release-unsigned.apk
             app/src/main/assets/dictionary/full_dictionary_manifest.json
             app/src/main/assets/dictionary/stroke_pack_manifest.json
+            app/schemas/com.chlna.tongshihanzi.data.dictionary.DictionaryDatabase/4.json
           if-no-files-found: error
