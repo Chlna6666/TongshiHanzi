@@ -92,22 +92,17 @@ public final class TtsManager {
 
     /** Speaks exactly one displayed Han character; it never substitutes a sample word. */
     public boolean speakCharacter(String character) {
-        String value = normalizeText(character);
-        if (value.codePointCount(0, value.length()) > 1) {
-            int end = value.offsetByCodePoints(0, 1);
-            value = value.substring(0, end);
-        }
-        return speakInternal(value, "character");
+        return speakInternal(SpeechTextPolicy.character(character), "character");
     }
 
     /** Speaks the complete word selected by the user. */
     public boolean speakWord(String word) {
-        return speakInternal(normalizeText(word), "word");
+        return speakInternal(SpeechTextPolicy.word(word), "word");
     }
 
     /** Generic compatibility entry point for sentences and settings previews. */
     public boolean speak(String text) {
-        return speakInternal(normalizeText(text), "text");
+        return speakInternal(SpeechTextPolicy.word(text), "text");
     }
 
     public void stop() {
@@ -140,10 +135,6 @@ public final class TtsManager {
         String utteranceId = "tongshi-" + type + '-' + System.nanoTime();
         return tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
                 == TextToSpeech.SUCCESS;
-    }
-
-    private static String normalizeText(String text) {
-        return text == null ? "" : text.trim();
     }
 
     private void applyPreferences() {
