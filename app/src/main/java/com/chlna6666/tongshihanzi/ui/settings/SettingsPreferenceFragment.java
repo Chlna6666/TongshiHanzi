@@ -5,16 +5,20 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.speech.tts.Voice;
+import android.view.View;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.navigation.fragment.NavHostFragment;
 import androidx.preference.ListPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.chlna6666.tongshihanzi.R;
 import com.chlna6666.tongshihanzi.data.user.UserRepository;
 import com.chlna6666.tongshihanzi.speech.TtsManager;
+import com.chlna6666.tongshihanzi.util.MotionEffects;
 import com.chlna6666.tongshihanzi.util.ThemeManager;
 import com.google.android.material.snackbar.Snackbar;
 
@@ -23,7 +27,20 @@ import java.util.List;
 public final class SettingsPreferenceFragment extends PreferenceFragmentCompat {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Runnable readyListener = this::updateVoices;
+    private final RecyclerView.OnChildAttachStateChangeListener motionRows =
+            new RecyclerView.OnChildAttachStateChangeListener() {
+                @Override
+                public void onChildViewAttachedToWindow(@NonNull View view) {
+                    MotionEffects.installPressFeedback(view);
+                }
+
+                @Override
+                public void onChildViewDetachedFromWindow(@NonNull View view) {
+                }
+            };
+
     private TtsManager tts;
+    private RecyclerView preferenceList;
 
     @Override
     public void onCreatePreferences(@Nullable Bundle state, @Nullable String rootKey) {
@@ -71,7 +88,8 @@ public final class SettingsPreferenceFragment extends PreferenceFragmentCompat {
         Preference test = findPreference("test_voice");
         if (test != null) {
             test.setOnPreferenceClickListener(preference -> {
-                boolean accepted = tts.speak("你好，我是童识汉字。点击汉字，就可以听到它的读音。");
+                boolean accepted = tts.speak(
+                        "你好，我是童识汉字。点击汉字，就可以听到它的读音。");
                 if (!accepted) {
                     Snackbar.make(requireView(), R.string.tts_unavailable, Snackbar.LENGTH_LONG)
                             .show();
@@ -99,6 +117,14 @@ public final class SettingsPreferenceFragment extends PreferenceFragmentCompat {
             });
         }
 
+        ListPreference motion = findPreference(MotionEffects.PREFERENCE_KEY);
+        if (motion != null) {
+            motion.setOnPreferenceChangeListener((preference, value) -> {
+                main.post(this::updateMotionSummary);
+                return true;
+            });
+        }
+
         Preference clear = findPreference("clear_history");
         if (clear != null) {
             clear.setOnPreferenceClickListener(preference -> {
@@ -120,6 +146,27 @@ public final class SettingsPreferenceFragment extends PreferenceFragmentCompat {
         }
 
         updateVoiceControls();
+        updateMotionSummary();
+    }
+
+    @Override
+    public void onViewCreated(@NonNull View view, @Nullable Bundle state) {
+        super.onViewCreated(view, state);
+        preferenceList = getListView();
+        preferenceList.setItemAnimator(null);
+        preferenceList.addOnChildAttachStateChangeListener(motionRows);
+        for (int index = 0; index < preferenceList.getChildCount(); index++) {
+            MotionEffects.installPressFeedback(preferenceList.getChildAt(index));
+        }
+    }
+
+    @Override
+    public void onDestroyView() {
+        if (preferenceList != null) {
+            preferenceList.removeOnChildAttachStateChangeListener(motionRows);
+            preferenceList = null;
+        }
+        super.onDestroyView();
     }
 
     @Override
@@ -151,6 +198,12 @@ public final class SettingsPreferenceFragment extends PreferenceFragmentCompat {
         preference.setEntries(entries);
         preference.setEntryValues(values);
         updateVoiceControls();
+    }
+
+    private void updateVoicesSafely() {
+        if (isAdded()) {
+            updateVoices();
+        }
     }
 
     private void updateVoiceControls() {
@@ -193,5 +246,17 @@ public final class SettingsPreferenceFragment extends PreferenceFragmentCompat {
                     ? voicePreference.getEntries()[selectedIndex]
                     : "请选择一个已安装的中文语音");
         }
+    }
+
+    private void updateMotionSummary() {
+        ListPreference motion = findPreference(MotionEffects.PREFERENCE_KEY);
+        if (motion == null) {
+            return;
+        }
+        int selected = motion.findIndexOfValue(motion.getValue());
+        String label = selected >= 0
+                ? String.valueOf(motion.getEntries()[selected])
+                : "增强弹性";
+        motion.setSummary(label + " · 可打断弹簧，不使用悬浮或循环动画");
     }
 }
