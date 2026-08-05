@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="about_developer_title">开发者</string>
+    <string name="about_developer_name">Chlna6666</string>
+    <string name="about_developer_description">童识汉字项目创建者与主要维护者</string>
+    <string name="about_open_source">查看项目源码</string>
+    <string name="about_profile">查看开发者主页</string>
+    <string name="about_dictionary_title">离线词库</string>
+    <string name="about_dictionary_loading">正在读取内置词库版本…</string>
+    <string name="about_dictionary_fallback">审校种子：25 个汉字\n扩展词库未打包，本构建仅包含开发种子。</string>
+    <string name="about_privacy_text">童识汉字是一款面向儿童、家长和教师的离线汉字查询工具。支持汉字、拼音、笔画和五笔 86 查询，并通过系统中文语音完成朗读。\n\n隐私：应用不要求账号，不包含广告、统计 SDK 或应用内联网请求；收藏与历史仅保存在设备本地。</string>
+    <string name="about_license_text">应用源代码：GPL-3.0-or-later\n\nAndroidX 与 Material Components：Apache-2.0\n\n审校种子：GPL-3.0-or-later\n\n扩展汉字与词语：mapull/chinese-dictionary，MIT\n\nUnicode 字符元数据：Unicode-3.0\n\n笔顺矢量：hanzi-writer-data，保留其上游许可。完整来源、固定提交和修改说明见 DATA_LICENSES.md。</string>
+</resources>
