@@ -49,8 +49,9 @@ android {
     }
 
     androidResources {
-        // StrokePackRepository uses AssetFileDescriptor + mmap for constant-time lookup.
-        noCompress += ['tshs']
+        // TSHS must remain mmap-compatible. The prebuilt Room database is also stored
+        // without ZIP Deflate so first launch performs a sequential copy, not full DB decompression.
+        noCompress += ['tshs', 'db']
     }
 
     packaging {
