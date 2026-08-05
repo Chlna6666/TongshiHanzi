@@ -47,36 +47,39 @@ jobs:
         run: gradle --stacktrace :dict-builder:test :dict-builder:run --args="$GITHUB_WORKSPACE/app/src/main/assets/dictionary/dictionary_seed.json"
 
       - name: Generate pinned full offline dictionary
-        run: python3 tools/sync_mapull_dictionary.py
+        run: python3 tools/generate_full_dictionary_asset.py
 
       - name: Verify full dictionary manifest
         run: |
           python3 - <<'PY'
           import gzip, json
           from pathlib import Path
+          asset = Path('app/src/main/assets/dictionary/full_dictionary.ndjson.bin')
           manifest = json.loads(Path('app/src/main/assets/dictionary/full_dictionary_manifest.json').read_text(encoding='utf-8'))
           count = 0
-          with gzip.open('app/src/main/assets/dictionary/full_dictionary.ndjson.gz', 'rt', encoding='utf-8') as source:
+          with gzip.open(asset, 'rt', encoding='utf-8') as source:
               for line in source:
                   if line.strip():
                       json.loads(line)
                       count += 1
           assert count == manifest['characterCount'], (count, manifest['characterCount'])
           assert count >= 8000, count
+          assert asset.read_bytes()[:2] == b'\x1f\x8b'
           print(f"Verified {count} bundled characters from {manifest['sourceCommit']}")
           PY
 
       - name: Persist generated dictionary assets
         if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
         run: |
-          git add app/src/main/assets/dictionary/full_dictionary.ndjson.gz
+          git rm --ignore-unmatch app/src/main/assets/dictionary/full_dictionary.ndjson.gz
+          git add app/src/main/assets/dictionary/full_dictionary.ndjson.bin
           git add app/src/main/assets/dictionary/full_dictionary_manifest.json
           if git diff --cached --quiet; then
             echo 'Dictionary assets are already current.'
           else
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git commit -m 'data: refresh bundled full dictionary [skip ci]'
+            git commit -m 'data: preserve bundled dictionary gzip bytes [skip ci]'
             git push origin "HEAD:${GITHUB_REF_NAME}"
           fi
 
@@ -85,6 +88,27 @@ jobs:
 
       - name: Unit tests and APKs
         run: gradle --stacktrace test assembleDebug assembleRelease
+
+      - name: Verify APK dictionary asset
+        run: |
+          python3 - <<'PY'
+          import gzip, io, json, zipfile
+          from pathlib import Path
+          for apk in (
+              Path('app/build/outputs/apk/debug/app-debug.apk'),
+              Path('app/build/outputs/apk/release/app-release-unsigned.apk'),
+          ):
+              with zipfile.ZipFile(apk) as archive:
+                  name = 'assets/dictionary/full_dictionary.ndjson.bin'
+                  assert name in archive.namelist(), f'{name} missing from {apk}'
+                  assert 'assets/dictionary/full_dictionary.ndjson' not in archive.namelist()
+                  payload = archive.read(name)
+                  assert payload[:2] == b'\x1f\x8b'
+                  with gzip.GzipFile(fileobj=io.BytesIO(payload)) as stream:
+                      first = json.loads(stream.readline().decode('utf-8'))
+                  assert first['character']
+                  print(f'{apk}: packaged gzip dictionary is runtime-readable')
+          PY
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
