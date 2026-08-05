@@ -13,8 +13,8 @@ import com.chlna.tongshihanzi.domain.search.SearchRanker;
 import com.chlna.tongshihanzi.domain.search.SearchResult;
 import com.chlna.tongshihanzi.domain.search.StrokeRange;
 import com.chlna.tongshihanzi.util.AppExecutors;
-import java.util.Collections;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -42,7 +42,8 @@ public final class SearchRepository {
                     success.accept(Collections.emptyList());
                     return;
                 }
-                SearchMode mode = requestedMode == SearchMode.AUTO ? QueryTypeDetector.detect(query) : requestedMode;
+                SearchMode mode = requestedMode == SearchMode.AUTO
+                        ? QueryTypeDetector.detect(query) : requestedMode;
                 DictionaryDao dao = store.dao();
                 Map<Integer, SearchResult> result = new LinkedHashMap<>();
                 switch (mode) {
@@ -59,6 +60,7 @@ public final class SearchRepository {
                         searchWubi(dao, result, query, true);
                     }
                 }
+                addUnicodeFallback(result, query);
                 List<SearchResult> values = new ArrayList<>(result.values());
                 values.sort(Comparator.comparingInt(SearchResult::getScore).reversed()
                         .thenComparingInt(SearchResult::getCharacterId));
@@ -69,23 +71,28 @@ public final class SearchRepository {
         });
     }
 
-    private void searchPinyin(DictionaryDao dao, Map<Integer, SearchResult> out, String raw, boolean includeWubi) {
+    private void searchPinyin(DictionaryDao dao, Map<Integer, SearchResult> out,
+                              String raw, boolean includeWubi) {
         String normalized = PinyinNormalizer.normalize(raw);
         if (normalized.isEmpty()) return;
         add(out, dao.searchPinyinExact(normalized, LIMIT), normalized, "拼音精确");
         add(out, dao.searchPinyinPrefix(normalized, LIMIT), normalized, "拼音前缀");
         add(out, dao.searchAliases(normalized, LIMIT), normalized, "相关匹配");
-        boolean loose = PreferenceManager.getDefaultSharedPreferences(context).getBoolean("loose_pinyin", false);
+        boolean loose = PreferenceManager.getDefaultSharedPreferences(context)
+                .getBoolean("loose_pinyin", false);
         if (loose) {
             String variant = PinyinNormalizer.looseInitialVariant(normalized);
-            if (!variant.equals(normalized)) add(out, dao.searchPinyinPrefix(variant, 20), normalized, "近似拼音");
+            if (!variant.equals(normalized)) {
+                add(out, dao.searchPinyinPrefix(variant, 20), normalized, "近似拼音");
+            }
         }
         if (includeWubi && normalized.length() <= 4) {
             add(out, dao.searchWubiPrefix(normalized, 20), normalized, "五笔前缀");
         }
     }
 
-    private void searchWubi(DictionaryDao dao, Map<Integer, SearchResult> out, String raw, boolean includePinyin) {
+    private void searchWubi(DictionaryDao dao, Map<Integer, SearchResult> out,
+                            String raw, boolean includePinyin) {
         String normalized = raw.replaceAll("[^A-Za-z]", "").toUpperCase(Locale.ROOT);
         if (normalized.isEmpty()) return;
         add(out, dao.searchWubiExact(normalized, LIMIT), normalized, "五笔精确");
@@ -96,11 +103,31 @@ public final class SearchRepository {
         }
     }
 
-    private static void add(Map<Integer, SearchResult> out, List<SearchRow> rows, String query, String matchType) {
+    private static void addUnicodeFallback(Map<Integer, SearchResult> out, String query) {
+        if (!UnicodeCharacterFallback.isSingleCjkCharacter(query)) return;
+        for (SearchResult value : out.values()) {
+            if (query.equals(value.getCharacter())) return;
+        }
+        int id = UnicodeCharacterFallback.syntheticId(query);
+        out.put(id, new SearchResult(
+                id,
+                query,
+                "读音待补充",
+                "待补充",
+                0,
+                "内置审校词库尚未收录该字，可查看 Unicode 基础信息。",
+                "Unicode 生僻字兜底",
+                10000));
+    }
+
+    private static void add(Map<Integer, SearchResult> out, List<SearchRow> rows,
+                            String query, String matchType) {
         for (SearchRow row : rows) {
-            int score = SearchRanker.score(query, row.character, firstPinyin(row.pinyin), row.wubi, row.frequencyRank, matchType);
-            SearchResult item = new SearchResult(row.characterId, row.character, safe(row.pinyin), safe(row.radical),
-                    row.totalStrokes, safe(row.definition), matchType, score);
+            int score = SearchRanker.score(query, row.character, firstPinyin(row.pinyin),
+                    row.wubi, row.frequencyRank, matchType);
+            SearchResult item = new SearchResult(row.characterId, row.character,
+                    safe(row.pinyin), safe(row.radical), row.totalStrokes,
+                    safe(row.definition), matchType, score);
             SearchResult old = out.get(row.characterId);
             if (old == null || item.getScore() > old.getScore()) out.put(row.characterId, item);
         }
@@ -111,5 +138,8 @@ public final class SearchRepository {
         int split = pinyin.indexOf(" / ");
         return PinyinNormalizer.normalize(split < 0 ? pinyin : pinyin.substring(0, split));
     }
-    private static String safe(String value) { return value == null ? "" : value; }
+
+    private static String safe(String value) {
+        return value == null ? "" : value;
+    }
 }

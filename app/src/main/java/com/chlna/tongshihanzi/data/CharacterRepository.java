@@ -8,20 +8,38 @@ import com.chlna.tongshihanzi.data.dictionary.DictionaryStore;
 import com.chlna.tongshihanzi.data.dictionary.SearchRow;
 import com.chlna.tongshihanzi.domain.search.SearchResult;
 import com.chlna.tongshihanzi.util.AppExecutors;
-import java.util.Collections;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.function.Consumer;
 
 public final class CharacterRepository {
     private final DictionaryStore store;
-    public CharacterRepository(Context context) { store = DictionaryStore.getInstance(context); }
 
-    public void loadCharacter(int id, Consumer<CharacterWithDetails> success, Consumer<Throwable> failure) {
+    public CharacterRepository(Context context) {
+        store = DictionaryStore.getInstance(context);
+    }
+
+    public void loadCharacter(int id, String fallbackCharacter,
+                              Consumer<CharacterWithDetails> success,
+                              Consumer<Throwable> failure) {
         AppExecutors.io().execute(() -> {
-            try { store.initialize().join(); success.accept(store.dao().getCharacter(id)); }
-            catch (Throwable error) { failure.accept(error); }
+            try {
+                if (id < 0 && UnicodeCharacterFallback.isSingleCjkCharacter(fallbackCharacter)) {
+                    success.accept(UnicodeCharacterFallback.create(fallbackCharacter));
+                    return;
+                }
+                store.initialize().join();
+                success.accept(store.dao().getCharacter(id));
+            } catch (Throwable error) {
+                failure.accept(error);
+            }
         });
+    }
+
+    public void loadCharacter(int id, Consumer<CharacterWithDetails> success,
+                              Consumer<Throwable> failure) {
+        loadCharacter(id, null, success, failure);
     }
 
     public void loadSource(String id, Consumer<DataSourceEntity> success) {
@@ -31,11 +49,14 @@ public final class CharacterRepository {
     public void rowsByIds(List<Integer> ids, Consumer<List<SearchResult>> success) {
         AppExecutors.io().execute(() -> {
             store.initialize().join();
-            if (ids == null || ids.isEmpty()) { success.accept(Collections.emptyList()); return; }
+            if (ids == null || ids.isEmpty()) {
+                success.accept(Collections.emptyList());
+                return;
+            }
             List<SearchResult> result = new ArrayList<>();
             for (SearchRow row : store.dao().getRowsByIds(ids)) {
-                result.add(new SearchResult(row.characterId, row.character, row.pinyin, row.radical,
-                        row.totalStrokes, row.definition, "收藏", 0));
+                result.add(new SearchResult(row.characterId, row.character, row.pinyin,
+                        row.radical, row.totalStrokes, row.definition, "收藏", 0));
             }
             success.accept(result);
         });
@@ -46,8 +67,8 @@ public final class CharacterRepository {
             store.initialize().join();
             List<SearchResult> result = new ArrayList<>();
             for (SearchRow row : store.dao().commonCharacters(limit)) {
-                result.add(new SearchResult(row.characterId, row.character, row.pinyin, row.radical,
-                        row.totalStrokes, row.definition, "常用字", 0));
+                result.add(new SearchResult(row.characterId, row.character, row.pinyin,
+                        row.radical, row.totalStrokes, row.definition, "常用字", 0));
             }
             success.accept(result);
         });
