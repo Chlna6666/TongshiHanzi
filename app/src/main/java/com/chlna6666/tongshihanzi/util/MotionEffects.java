@@ -8,6 +8,7 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import androidx.dynamicanimation.animation.DynamicAnimation;
+import androidx.dynamicanimation.animation.FloatPropertyCompat;
 import androidx.dynamicanimation.animation.SpringAnimation;
 import androidx.dynamicanimation.animation.SpringForce;
 import androidx.preference.PreferenceManager;
@@ -203,7 +204,7 @@ public final class MotionEffects {
 
     private static SpringAnimation springTo(
             View view,
-            DynamicAnimation.ViewProperty property,
+            FloatPropertyCompat<View> property,
             float finalPosition,
             MotionLevel level
     ) {
@@ -294,7 +295,7 @@ public final class MotionEffects {
         private boolean bottomEndListenerInstalled;
         private float bottomHiddenOffset;
 
-        SpringAnimation animation(View view, DynamicAnimation.ViewProperty property) {
+        SpringAnimation animation(View view, FloatPropertyCompat<View> property) {
             if (property == DynamicAnimation.ALPHA) {
                 if (alpha == null) {
                     alpha = create(view, property, 0.003f);
@@ -328,7 +329,7 @@ public final class MotionEffects {
 
         private static SpringAnimation create(
                 View view,
-                DynamicAnimation.ViewProperty property,
+                FloatPropertyCompat<View> property,
                 float minimumVisibleChange
         ) {
             SpringAnimation animation = new SpringAnimation(view, property);
