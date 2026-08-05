@@ -18,12 +18,12 @@
 
 ## 离线词库
 
-项目保留 25 个经过人工审校的儿童释义作为高质量覆盖层，同时从固定版本的 `mapull/chinese-dictionary` 生成完整扩展词库。上游提供约 2 万个汉字、常用及生僻字信息和大规模词语数据。
+项目保留 25 个经过人工审校的儿童释义作为高质量覆盖层，同时从固定版本的 `mapull/chinese-dictionary` 生成完整扩展词库。当前打包 **21,056 个汉字**，覆盖常用字和大量生僻字，并关联受限数量的词语候选。
 
-生成文件采用 gzip 压缩的 NDJSON。应用首次建立字典数据库时按 256 个汉字一批导入，避免一次性加载完整数据造成明显内存峰值。
+词库内容采用 gzip 压缩的 NDJSON，但使用 `.bin` 作为 Android asset 容器扩展名，防止 AAPT 自动展开 `.gz` 并移除文件后缀。应用首次建立字典数据库时按 256 个汉字一批导入，避免一次性加载完整数据造成明显内存峰值。
 
 ```bash
-python3 tools/sync_mapull_dictionary.py
+python3 tools/generate_full_dictionary_asset.py
 ```
 
 数据源固定到明确提交，许可证、修改说明和更新流程见 `DATA_LICENSES.md`。`pwxcoo/chinese-xinhua` 当前不直接打包，因为其 README 明确说明数据来自网站抓取，逐条来源和再分发权利仍需进一步核验。
@@ -38,7 +38,7 @@ python3 tools/sync_mapull_dictionary.py
 - Android Build Tools 36.0.0
 
 ```bash
-python3 tools/sync_mapull_dictionary.py
+python3 tools/generate_full_dictionary_asset.py
 gradle clean test assembleDebug assembleRelease
 ```
 
@@ -59,7 +59,8 @@ Android CI 会执行：
 3. 校验压缩词库中的每条 JSON 与字符计数；
 4. 生成审校字符的离线笔顺矢量；
 5. 运行单元测试并构建 Debug、Release APK；
-6. 上传 APK 与词库清单。
+6. 直接检查 APK 内的 `.bin` 词库文件名、gzip 魔数和首条 JSON；
+7. 上传 APK 与词库清单。
 
 首次生成完整词库时，工作流会把确定性的压缩数据文件提交回当前分支；后续构建在固定上游提交未变化时不会重复下载或改写文件。
 
