@@ -10,8 +10,8 @@ android {
         applicationId = 'com.chlna6666.tongshihanzi'
         minSdk = 26
         targetSdk = 36
-        versionCode = 5
-        versionName = '0.3.2'
+        versionCode = 6
+        versionName = '0.3.3'
 
         testInstrumentationRunner = 'androidx.test.runner.AndroidJUnitRunner'
 
@@ -68,6 +68,7 @@ dependencies {
     implementation 'androidx.fragment:fragment:1.8.9'
     implementation 'androidx.constraintlayout:constraintlayout:2.2.1'
     implementation 'androidx.recyclerview:recyclerview:1.4.0'
+    implementation 'androidx.dynamicanimation:dynamicanimation:1.1.0'
     implementation 'androidx.lifecycle:lifecycle-viewmodel:2.11.0'
     implementation 'androidx.lifecycle:lifecycle-livedata:2.11.0'
     implementation 'androidx.navigation:navigation-fragment:2.9.8'
