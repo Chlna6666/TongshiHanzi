@@ -35,6 +35,8 @@ public final class MotionEffects {
     private static final WeakHashMap<View, Long> ITEM_KEYS = new WeakHashMap<>();
     private static final Set<View> PRESS_INSTALLED =
             Collections.newSetFromMap(new WeakHashMap<>());
+    private static final Set<View> LIFECYCLE_INSTALLED =
+            Collections.newSetFromMap(new WeakHashMap<>());
 
     private MotionEffects() {
     }
@@ -193,14 +195,6 @@ public final class MotionEffects {
         }
     }
 
-    public static boolean isReduced(Context context) {
-        return level(context) == MotionLevel.REDUCED;
-    }
-
-    public static boolean isEnabled(Context context) {
-        return level(context) != MotionLevel.OFF;
-    }
-
     private static void setPressed(View view, boolean pressed) {
         MotionLevel level = level(view.getContext());
         if (level == MotionLevel.OFF) {
@@ -243,19 +237,25 @@ public final class MotionEffects {
         }
         MotionState created = new MotionState();
         STATES.put(view, created);
-        view.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
-            @Override
-            public void onViewAttachedToWindow(View attached) {
-            }
-
-            @Override
-            public void onViewDetachedFromWindow(View detached) {
-                MotionState detachedState = STATES.get(detached);
-                if (detachedState != null) {
-                    cancel(detachedState);
+        if (LIFECYCLE_INSTALLED.add(view)) {
+            view.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+                @Override
+                public void onViewAttachedToWindow(View attached) {
                 }
-            }
-        });
+
+                @Override
+                public void onViewDetachedFromWindow(View detached) {
+                    MotionState detachedState = STATES.remove(detached);
+                    if (detachedState != null) {
+                        cancel(detachedState);
+                    }
+                    detached.setAlpha(1f);
+                    detached.setTranslationY(0f);
+                    detached.setScaleX(1f);
+                    detached.setScaleY(1f);
+                }
+            });
+        }
         return created;
     }
 
@@ -264,7 +264,7 @@ public final class MotionEffects {
     }
 
     private static void reset(View view) {
-        MotionState state = STATES.get(view);
+        MotionState state = STATES.remove(view);
         if (state != null) {
             cancel(state);
         }
