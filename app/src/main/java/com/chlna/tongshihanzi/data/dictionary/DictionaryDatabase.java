@@ -10,12 +10,14 @@ import androidx.room.RoomDatabase;
         CharacterEntity.class, PronunciationEntity.class, DefinitionEntity.class,
         WordEntity.class, WubiEntity.class, StrokeEntity.class,
         SearchAliasEntity.class, DataSourceEntity.class
-}, version = 1, exportSchema = true)
+}, version = 2, exportSchema = true)
 public abstract class DictionaryDatabase extends RoomDatabase {
     public abstract DictionaryDao dictionaryDao();
 
     static DictionaryDatabase create(Context context) {
         return Room.databaseBuilder(context, DictionaryDatabase.class, "dictionary.db")
+                // Dictionary data is bundled and reproducible; rebuilding is safer than
+                // maintaining migrations for generated read-only content.
                 .fallbackToDestructiveMigration(true)
                 .build();
     }
