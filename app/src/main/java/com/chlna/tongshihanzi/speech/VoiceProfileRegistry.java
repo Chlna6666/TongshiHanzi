@@ -142,11 +142,22 @@ final class VoiceProfileRegistry {
     }
 
     private static final Comparator<Voice> VOICE_PRIORITY =
-            Comparator.comparing(Voice::isNetworkConnectionRequired)
+            Comparator.comparingInt((Voice voice) -> profileRank(classify(voice)))
+                    .thenComparing(Voice::isNetworkConnectionRequired)
                     .thenComparing((Voice voice) -> localeRank(voice.getLocale()))
                     .thenComparing(Comparator.comparingInt(Voice::getQuality).reversed())
                     .thenComparingInt(Voice::getLatency)
                     .thenComparing(Voice::getName);
+
+    private static int profileRank(Profile profile) {
+        if (profile == Profile.ADULT_FEMALE || profile == Profile.ADULT_MALE) {
+            return 0;
+        }
+        if (profile == Profile.UNKNOWN) {
+            return 1;
+        }
+        return 2;
+    }
 
     private static int localeRank(Locale locale) {
         if (Locale.SIMPLIFIED_CHINESE.equals(locale)) {
