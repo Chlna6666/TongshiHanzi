@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Generate TongshiHanzi's complete bundled offline dictionary.
 
-The generator keeps the project-reviewed 25-character seed as an editorial overlay
-and fills the remaining corpus from a pinned mapull/chinese-dictionary revision.
-Upstream files are JSON Lines despite their .json suffix, so records are streamed.
-The generated Android asset is deterministic gzip-compressed NDJSON.
+The 25 project-reviewed entries remain the editorial overlay. Remaining records are
+built from a pinned mapull/chinese-dictionary revision. Upstream `.json` files contain
+concatenated JSON objects, so this generator scans them with JSONDecoder.raw_decode.
+The Android asset is deterministic gzip-compressed NDJSON and is imported in batches.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ SOURCE_FILES = {
     "detail": "character/char_detail.json",
     "words": "word/word.json",
 }
-USER_AGENT = "TongshiHanzi-dictionary-builder/2.1"
+USER_AGENT = "TongshiHanzi-dictionary-builder/2.2"
 MAX_DEFINITIONS_PER_READING = 6
 MAX_WORDS_PER_READING = 8
 MAX_WORD_CANDIDATES_PER_CHARACTER = 36
@@ -41,32 +41,15 @@ PINYIN_SEPARATOR_RE = re.compile(r"[,，、/;；]+")
 HAN_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 
 STRUCTURES = {
-    "D0": "独体结构",
-    "D1": "镶嵌结构",
-    "A0": "品字形结构",
-    "B0": "上下结构",
-    "B1": "上下结构",
-    "B2": "上下结构",
-    "B3": "上下结构",
-    "B4": "田字结构",
-    "E0": "上中下结构",
-    "E1": "上中下结构",
-    "E2": "上中下结构",
-    "H0": "左右结构",
-    "H1": "左右结构",
-    "H2": "左右结构",
-    "H3": "左右结构",
-    "M0": "左中右结构",
-    "M1": "左中右结构",
-    "M2": "左中右结构",
-    "Q0": "全包围结构",
-    "R0": "半包围结构",
-    "R1": "半包围结构",
-    "R2": "半包围结构",
-    "R3": "半包围结构",
-    "R4": "半包围结构",
-    "R5": "半包围结构",
-    "R6": "半包围结构",
+    "D0": "独体结构", "D1": "镶嵌结构", "A0": "品字形结构",
+    "B0": "上下结构", "B1": "上下结构", "B2": "上下结构",
+    "B3": "上下结构", "B4": "田字结构", "E0": "上中下结构",
+    "E1": "上中下结构", "E2": "上中下结构", "H0": "左右结构",
+    "H1": "左右结构", "H2": "左右结构", "H3": "左右结构",
+    "M0": "左中右结构", "M1": "左中右结构", "M2": "左中右结构",
+    "Q0": "全包围结构", "R0": "半包围结构", "R1": "半包围结构",
+    "R2": "半包围结构", "R3": "半包围结构", "R4": "半包围结构",
+    "R5": "半包围结构", "R6": "半包围结构",
 }
 
 
@@ -101,58 +84,26 @@ def download(relative_path: str, cache_dir: Path, retries: int = 3) -> Path:
 
 
 def iter_json_records(path: Path) -> Iterator[dict[str, Any]]:
-    """Read a normal JSON array/object or newline-delimited JSON records."""
-    with path.open("r", encoding="utf-8-sig") as source:
-        first_line = ""
-        for line in source:
-            if line.strip():
-                first_line = line
-                break
-        if not first_line:
-            return
-        first_non_space = first_line.lstrip()[:1]
-        if first_non_space in ("[", "{"):
-            # A leading object can still be JSONL. Try that line first, then continue
-            # line-by-line; if it is a multi-line document, fall back to full parsing.
-            if first_non_space == "{":
-                try:
-                    value = json.loads(first_line)
-                except json.JSONDecodeError:
-                    remainder = first_line + source.read()
-                    parsed = json.loads(remainder)
-                    if isinstance(parsed, list):
-                        for item in parsed:
-                            if isinstance(item, dict):
-                                yield item
-                    elif isinstance(parsed, dict):
-                        yield parsed
-                    return
-                if isinstance(value, dict):
-                    yield value
-                for line_number, line in enumerate(source, 2):
-                    stripped = line.strip()
-                    if not stripped:
-                        continue
-                    try:
-                        value = json.loads(stripped)
-                    except json.JSONDecodeError as error:
-                        raise ValueError(
-                            f"{path}:{line_number}: invalid JSONL record: {error}"
-                        ) from error
-                    if isinstance(value, dict):
-                        yield value
-                return
-
-            document = first_line + source.read()
-            parsed = json.loads(document)
-            if isinstance(parsed, list):
-                for item in parsed:
-                    if isinstance(item, dict):
-                        yield item
-            elif isinstance(parsed, dict):
-                yield parsed
-            return
-        raise ValueError(f"Unsupported dictionary format: {path}")
+    """Read arrays, JSONL, or multiple JSON objects concatenated without separators."""
+    document = path.read_text(encoding="utf-8-sig")
+    decoder = json.JSONDecoder()
+    index = 0
+    length = len(document)
+    while index < length:
+        while index < length and (document[index].isspace() or document[index] == ","):
+            index += 1
+        if index >= length:
+            break
+        value, next_index = decoder.raw_decode(document, index)
+        index = next_index
+        if isinstance(value, dict):
+            yield value
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict):
+                    yield item
+        else:
+            raise ValueError(f"Unsupported record type in {path}: {type(value).__name__}")
 
 
 def read_json_document(path: Path) -> Any:
@@ -178,9 +129,7 @@ def clean_text(value: Any, limit: int) -> str:
     if not isinstance(value, str):
         return ""
     text = SPACE_RE.sub(" ", value).strip()
-    if len(text) > limit:
-        return text[: limit - 1].rstrip() + "…"
-    return text
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
 
 
 def safe_int(value: Any, default: int = 0) -> int:
@@ -209,8 +158,7 @@ def normalize_pinyin(value: str) -> str:
     value = re.sub(r"[1-5]$", "", value)
     decomposed = unicodedata.normalize("NFD", value)
     return "".join(
-        character
-        for character in decomposed
+        character for character in decomposed
         if unicodedata.category(character) != "Mn" and character.isalpha()
     )
 
@@ -220,10 +168,8 @@ def tone_number(value: str) -> int:
     if stripped and stripped[-1] in "12345":
         return int(stripped[-1])
     tone_marks = {
-        **dict.fromkeys("āēīōūǖ", 1),
-        **dict.fromkeys("áéíóúǘ", 2),
-        **dict.fromkeys("ǎěǐǒǔǚ", 3),
-        **dict.fromkeys("àèìòùǜ", 4),
+        **dict.fromkeys("āēīōūǖ", 1), **dict.fromkeys("áéíóúǘ", 2),
+        **dict.fromkeys("ǎěǐǒǔǚ", 3), **dict.fromkeys("àèìòùǜ", 4),
     }
     for character in stripped:
         if character in tone_marks:
@@ -244,38 +190,27 @@ def build_detail_index(path: Path) -> dict[str, dict[str, list[dict[str, Any]]]]
             pinyin = clean_text(reading.get("pinyin"), 32)
             if not pinyin:
                 continue
-            explanations = [
-                item
-                for item in as_list(reading.get("explanations"))
+            readings[normalize_pinyin(pinyin)] = [
+                item for item in as_list(reading.get("explanations"))
                 if isinstance(item, dict)
             ]
-            readings[normalize_pinyin(pinyin)] = explanations
         result[character] = readings
     return result
 
 
-def build_word_index(
-    path: Path,
-    known_characters: set[str],
-) -> dict[str, list[dict[str, str]]]:
+def build_word_index(path: Path, known_characters: set[str]) -> dict[str, list[dict[str, str]]]:
     result: dict[str, list[dict[str, str]]] = defaultdict(list)
     accepted = 0
     for item in iter_json_records(path):
         word = clean_text(item.get("word"), 32)
         pinyin = clean_text(item.get("pinyin"), 96)
-        explanation = clean_text(
-            item.get("explanation"), MAX_WORD_DEFINITION_LENGTH
-        )
+        explanation = clean_text(item.get("explanation"), MAX_WORD_DEFINITION_LENGTH)
         if len(word) < 2 or len(word) > 8 or not pinyin:
             continue
         characters = {character for character in word if character in known_characters}
         if not characters:
             continue
-        compact = {
-            "word": word,
-            "pinyin": pinyin,
-            "definition": explanation,
-        }
+        compact = {"word": word, "pinyin": pinyin, "definition": explanation}
         inserted = False
         for character in characters:
             bucket = result[character]
@@ -295,15 +230,11 @@ def extract_definitions_and_words(
     words: list[dict[str, str]] = []
     seen_words: set[str] = set()
     for explanation in explanations:
-        candidates = (
-            explanation.get("content"),
-            explanation.get("refer"),
-            explanation.get("same"),
-            explanation.get("modern"),
-            explanation.get("simplified"),
-            explanation.get("variant"),
-        )
-        for candidate in candidates:
+        for candidate in (
+            explanation.get("content"), explanation.get("refer"),
+            explanation.get("same"), explanation.get("modern"),
+            explanation.get("simplified"), explanation.get("variant"),
+        ):
             text = clean_text(candidate, MAX_DEFINITION_LENGTH)
             if text and text not in definitions:
                 definitions.append(text)
@@ -315,16 +246,14 @@ def extract_definitions_and_words(
             if not word or word in seen_words:
                 continue
             seen_words.add(word)
-            words.append(
-                {
-                    "word": word,
-                    "pinyin": clean_text(value.get("pinyin"), 96),
-                    "definition": clean_text(
-                        value.get("text") or value.get("example"),
-                        MAX_WORD_DEFINITION_LENGTH,
-                    ),
-                }
-            )
+            words.append({
+                "word": word,
+                "pinyin": clean_text(value.get("pinyin"), 96),
+                "definition": clean_text(
+                    value.get("text") or value.get("example"),
+                    MAX_WORD_DEFINITION_LENGTH,
+                ),
+            })
     return definitions[:MAX_DEFINITIONS_PER_READING], words
 
 
@@ -371,13 +300,11 @@ def build_character(
     character = base.get("char")
     if not isinstance(character, str) or len(character) != 1:
         return None
-
     pinyin_values = unique_strings(as_list(base.get("pinyin")))
     detail_readings = details.get(character, {})
     if not pinyin_values:
         pinyin_values = unique_strings(
-            reading.get("pinyin")
-            for reading in as_list(base.get("pronunciations"))
+            reading.get("pinyin") for reading in as_list(base.get("pronunciations"))
             if isinstance(reading, dict)
         )
     if not pinyin_values and detail_readings:
@@ -389,15 +316,13 @@ def build_character(
     frequency = safe_int(base.get("frequency"), 5)
     readings: list[dict[str, Any]] = []
     for order, pinyin in enumerate(pinyin_values):
-        explanation_values = detail_readings.get(normalize_pinyin(pinyin), [])
-        definitions, embedded_words = extract_definitions_and_words(explanation_values)
+        definitions, embedded_words = extract_definitions_and_words(
+            detail_readings.get(normalize_pinyin(pinyin), [])
+        )
         if not definitions:
             definitions = ["该字的基础读音、部首和笔画信息已收录；释义仍待进一步审校。"]
         global_words = matching_words(
-            character,
-            pinyin,
-            words.get(character, []),
-            primary=order == 0,
+            character, pinyin, words.get(character, []), primary=order == 0
         )
         merged_words: list[dict[str, str]] = []
         seen_words: set[str] = set()
@@ -408,20 +333,18 @@ def build_character(
                 merged_words.append(item)
             if len(merged_words) >= MAX_WORDS_PER_READING:
                 break
-        readings.append(
-            {
-                "pinyin": pinyin,
-                "tone": tone_number(pinyin),
-                "speakWord": merged_words[0]["word"] if merged_words else character,
-                "definitions": definitions,
-                "words": merged_words,
-            }
-        )
+        readings.append({
+            "pinyin": pinyin,
+            "tone": tone_number(pinyin),
+            "speakWord": merged_words[0]["word"] if merged_words else character,
+            "definitions": definitions,
+            "words": merged_words,
+        })
 
     traditional_values = unique_strings(as_list(base.get("traditional")))
     traditional = "".join(traditional_values) if traditional_values else character
-    structure_value = as_list(base.get("structure"))
-    structure_code = str(structure_value[0]) if structure_value else ""
+    structure_values = as_list(base.get("structure"))
+    structure_code = str(structure_values[0]) if structure_values else ""
     radical = clean_text(base.get("radicals") or base.get("radical"), 24) or "—"
     return {
         "id": 100000 + base_index,
@@ -505,15 +428,13 @@ def generate(
         for item in as_list(curated_root.get("characters"))
         if isinstance(item, dict) and isinstance(item.get("character"), str)
     }
-
     base_path = download(SOURCE_FILES["base"], cache_dir)
     detail_path = download(SOURCE_FILES["detail"], cache_dir)
     word_path = download(SOURCE_FILES["words"], cache_dir)
 
     base_entries = list(iter_json_records(base_path))
     known_characters = {
-        item.get("char")
-        for item in base_entries
+        item.get("char") for item in base_entries
         if isinstance(item.get("char"), str) and len(item["char"]) == 1
     }
     print(f"Loaded {len(base_entries)} base character records")
@@ -538,7 +459,6 @@ def generate(
             continue
         generated.append(entry)
         emitted.add(entry["character"])
-
     for character, entry in curated_entries.items():
         if character not in emitted:
             generated.append(entry)
@@ -572,33 +492,26 @@ def generate(
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--curated",
-        type=Path,
+        "--curated", type=Path,
         default=Path("app/src/main/assets/dictionary/dictionary_seed.json"),
     )
     parser.add_argument(
-        "--output",
-        type=Path,
+        "--output", type=Path,
         default=Path("app/src/main/assets/dictionary/full_dictionary.ndjson.gz"),
     )
     parser.add_argument(
-        "--manifest",
-        type=Path,
+        "--manifest", type=Path,
         default=Path("app/src/main/assets/dictionary/full_dictionary_manifest.json"),
     )
     parser.add_argument(
-        "--cache-dir",
-        type=Path,
+        "--cache-dir", type=Path,
         default=Path(".cache/mapull-chinese-dictionary") / SOURCE_COMMIT,
     )
     parser.add_argument("--force", action="store_true")
     arguments = parser.parse_args()
     generate(
-        arguments.curated,
-        arguments.output,
-        arguments.manifest,
-        arguments.cache_dir,
-        arguments.force,
+        arguments.curated, arguments.output, arguments.manifest,
+        arguments.cache_dir, arguments.force,
     )
 
 
