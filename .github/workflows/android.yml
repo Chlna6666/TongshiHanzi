@@ -44,6 +44,9 @@ jobs:
       - name: Validate dictionary seed
         run: gradle --stacktrace :dict-builder:test :dict-builder:run --args="$GITHUB_WORKSPACE/app/src/main/assets/dictionary/dictionary_seed.json"
 
+      - name: Generate offline stroke vectors
+        run: python3 tools/generate_stroke_vectors.py --strict
+
       - name: Unit tests and APKs
         run: gradle --stacktrace test assembleDebug assembleRelease
 
