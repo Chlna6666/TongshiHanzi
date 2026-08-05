@@ -6,6 +6,10 @@ TongshiHanzi application code is licensed under GPL-3.0-or-later. Third-party so
 
 Android Gradle Plugin, AndroidX, Room, Preference, Navigation, Lifecycle and Material Components retain Apache-2.0. Binary distributions must preserve applicable notices from dependency artifacts.
 
+## Interface icons
+
+The application packages only the Lucide vector icons it actually uses: search, bookmark, settings, volume-2 and arrow-left. No complete Lucide runtime or icon catalogue is bundled. Lucide portions retain the ISC License; Feather-derived icons retain the MIT License. The complete upstream notice is preserved in `licenses/ISC-MIT-lucide-icons.txt`.
+
 ## Lexical data
 
 The expanded offline dictionary contains normalized records from `mapull/chinese-dictionary`, pinned to commit `e804ada333b68afddfdccbe8dcc938a72da157a7`, under the MIT License. Copyright (c) 2021 码谱. The full MIT text is preserved in `licenses/MIT-mapull-chinese-dictionary.txt`.
