@@ -170,7 +170,9 @@ jobs:
                       assert json.loads(stream.readline().decode('utf-8'))['character']
 
                   stroke_info = archive.getinfo(stroke_name)
+                  database_info = archive.getinfo(database_name)
                   assert stroke_info.compress_type == zipfile.ZIP_STORED, 'TSHS must remain mmap-compatible'
+                  assert database_info.compress_type == zipfile.ZIP_STORED, 'Room DB must avoid first-launch ZIP inflation'
                   stroke = archive.read(stroke_name)
                   magic, version, stroke_count = struct.unpack_from('>4sII', stroke, 0)
                   assert magic == b'TSHS' and version == 1 and stroke_count >= 9000
@@ -184,7 +186,7 @@ jobs:
                           assert connection.execute('SELECT COUNT(*) FROM characters').fetchone()[0] == expected
                       finally:
                           connection.close()
-                  print(f'{apk}: dictionary DB and {stroke_count}-character stroke pack verified')
+                  print(f'{apk}: uncompressed Room DB and {stroke_count}-character stroke pack verified')
           PY
 
       - name: Upload APK artifacts
