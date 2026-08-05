@@ -10,12 +10,14 @@ The reviewed seed is an overlay: when the full dictionary is generated, these en
 
 ## Full offline dictionary
 
-`tools/sync_mapull_dictionary.py` generates:
+`tools/generate_full_dictionary_asset.py` invokes the pinned source generator and produces:
 
 ```text
-app/src/main/assets/dictionary/full_dictionary.ndjson.gz
+app/src/main/assets/dictionary/full_dictionary.ndjson.bin
 app/src/main/assets/dictionary/full_dictionary_manifest.json
 ```
+
+The `.bin` file contains deterministic gzip-compressed NDJSON. The non-`.gz` extension is intentional: Android AAPT expands assets ending in `.gz` and removes that suffix, which would make the runtime asset name differ from the source path. The application opens the preserved `.bin` bytes with `GZIPInputStream` and imports records in bounded transactions.
 
 The source is pinned to:
 
@@ -26,9 +28,9 @@ License: MIT
 Copyright (c) 2021 码谱
 ```
 
-The generator imports the upstream character base, character details and word data. It then normalizes structures and pinyin, removes duplicates, limits unusually large per-reading payloads and writes deterministic gzip-compressed NDJSON. The Android application imports that stream in bounded transactions, so it does not need to retain the complete dictionary in memory.
+The generator imports the upstream character base, character details and word data. It normalizes structures and pinyin, removes duplicates, limits unusually large per-reading payloads and currently generates 21,056 character records. Imported definitions remain extended reference data and require continued editorial review.
 
-The upstream project states that its data was assembled from multiple public and open resources and also warns that rare-character accuracy has not been strictly verified. TongshiHanzi therefore marks imported records as extended reference data rather than child-reviewed content. The 25 project-reviewed records remain visually and semantically preferred.
+The upstream project states that its data was assembled from multiple public and open resources and warns that rare-character accuracy has not been strictly verified. TongshiHanzi therefore keeps the 25 project-reviewed records visually and semantically preferred.
 
 The complete upstream MIT text is preserved in `licenses/MIT-mapull-chinese-dictionary.txt`.
 
@@ -52,8 +54,9 @@ A single CJK Unified Ideograph absent from the bundled dictionaries can still be
 
 1. Review the newer upstream commit and its license/provenance notes.
 2. Change `SOURCE_COMMIT` and `SOURCE_VERSION` in `tools/sync_mapull_dictionary.py`.
-3. Run `python3 tools/sync_mapull_dictionary.py --force`.
+3. Run `python3 tools/generate_full_dictionary_asset.py`.
 4. Validate the generated manifest count and inspect a representative set of common, polyphonic and rare characters.
-5. Commit the compressed asset, manifest, license changes and source revision together.
+5. Confirm that both APKs contain `assets/dictionary/full_dictionary.ndjson.bin` and that its first bytes are the gzip magic `1f 8b`.
+6. Commit the compressed asset, manifest, license changes and source revision together.
 
 Do not import commercial dictionary text, non-commercial-only data, no-derivatives data or content with unknown provenance. Every imported dataset must retain source ID, pinned version, license, modification note and review status.
