@@ -19,6 +19,25 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Apply package namespace migration
+        run: python3 tools/migrate_package_namespace.py
+
+      - name: Verify package namespace
+        run: python3 tools/migrate_package_namespace.py --check
+
+      - name: Persist package namespace migration
+        if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'Package namespace is already current.'
+          else
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'refactor: migrate Android package namespace [skip ci]'
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
+
       - name: Set up JDK 17
         uses: actions/setup-java@v5
         with:
@@ -99,7 +118,7 @@ jobs:
         run: |
           rm -rf app/schemas
           gradle --stacktrace --rerun-tasks :app:compileDebugJavaWithJavac
-          test -f app/schemas/com.chlna.tongshihanzi.data.dictionary.DictionaryDatabase/4.json
+          test -f app/schemas/com.chlna6666.tongshihanzi.data.dictionary.DictionaryDatabase/4.json
 
       - name: Build prepopulated dictionary database
         run: python3 tools/build_prebuilt_dictionary.py --version 4
@@ -198,5 +217,5 @@ jobs:
             app/build/outputs/apk/release/app-release-unsigned.apk
             app/src/main/assets/dictionary/full_dictionary_manifest.json
             app/src/main/assets/dictionary/stroke_pack_manifest.json
-            app/schemas/com.chlna.tongshihanzi.data.dictionary.DictionaryDatabase/4.json
+            app/schemas/com.chlna6666.tongshihanzi.data.dictionary.DictionaryDatabase/4.json
           if-no-files-found: error
