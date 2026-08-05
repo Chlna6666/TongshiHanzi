@@ -42,7 +42,7 @@ jobs:
           sdkmanager --list_installed
 
       - name: Validate dictionary seed
-        run: gradle --stacktrace :dict-builder:test :dict-builder:run --args='app/src/main/assets/dictionary/dictionary_seed.json'
+        run: gradle --stacktrace :dict-builder:test :dict-builder:run --args="$GITHUB_WORKSPACE/app/src/main/assets/dictionary/dictionary_seed.json"
 
       - name: Unit tests and APKs
         run: gradle --stacktrace test assembleDebug assembleRelease
