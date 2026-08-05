@@ -19,25 +19,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Apply package namespace migration
-        run: python3 tools/migrate_package_namespace.py
-
-      - name: Verify package namespace
-        run: python3 tools/migrate_package_namespace.py --check
-
-      - name: Persist package namespace migration
-        if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
-        run: |
-          git add -A
-          if git diff --cached --quiet; then
-            echo 'Package namespace is already current.'
-          else
-            git config user.name 'github-actions[bot]'
-            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git commit -m 'refactor: migrate Android package namespace [skip ci]'
-            git push origin "HEAD:${GITHUB_REF_NAME}"
-          fi
-
       - name: Set up JDK 17
         uses: actions/setup-java@v5
         with:
