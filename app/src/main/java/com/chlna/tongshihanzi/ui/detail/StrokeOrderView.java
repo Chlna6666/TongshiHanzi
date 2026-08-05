@@ -231,7 +231,7 @@ public final class StrokeOrderView extends View {
 
     private void drawVectorGlyph(Canvas canvas) {
         int primary = MaterialColors.getColor(this,
-                com.google.android.material.R.attr.colorPrimary);
+                androidx.appcompat.R.attr.colorPrimary);
         int onSurface = MaterialColors.getColor(this,
                 com.google.android.material.R.attr.colorOnSurface);
 
