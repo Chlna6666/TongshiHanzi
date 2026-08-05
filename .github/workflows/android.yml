@@ -13,7 +13,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@v4
         with:
@@ -68,46 +68,125 @@ jobs:
           print(f"Verified {count} bundled characters from {manifest['sourceCommit']}")
           PY
 
-      - name: Persist generated dictionary assets
+      - name: Generate reviewed stroke fallback
+        run: python3 tools/generate_stroke_vectors.py --strict
+
+      - name: Generate complete indexed stroke pack
+        run: python3 tools/generate_stroke_pack.py --strict-curated
+
+      - name: Verify stroke pack
+        run: |
+          python3 - <<'PY'
+          import json, struct, zlib
+          from pathlib import Path
+          pack = Path('app/src/main/assets/dictionary/stroke_pack.tshs').read_bytes()
+          manifest = json.loads(Path('app/src/main/assets/dictionary/stroke_pack_manifest.json').read_text(encoding='utf-8'))
+          magic, version, count = struct.unpack_from('>4sII', pack, 0)
+          assert magic == b'TSHS'
+          assert version == 1
+          assert count == manifest['characterCount']
+          assert count >= 9000, count
+          assert manifest['validatedCuratedCount'] == manifest['curatedCharacterCount'] == 25
+          codepoint, offset, compressed_length, raw_length = struct.unpack_from('>IQII', pack, 12)
+          payload = zlib.decompress(pack[offset:offset + compressed_length])
+          assert len(payload) == raw_length
+          record = json.loads(payload)
+          assert len(record['strokes']) == len(record['medians']) > 0
+          print(f'Verified indexed stroke pack with {count} characters')
+          PY
+
+      - name: Export Room schema v4
+        run: |
+          rm -rf app/schemas
+          gradle --stacktrace --rerun-tasks :app:compileDebugJavaWithJavac
+          test -f app/schemas/com.chlna.tongshihanzi.data.dictionary.DictionaryDatabase/4.json
+
+      - name: Build prepopulated dictionary database
+        run: python3 tools/build_prebuilt_dictionary.py --version 4
+
+      - name: Verify prepopulated database
+        run: |
+          python3 - <<'PY'
+          import json, sqlite3
+          from pathlib import Path
+          database = Path('app/src/main/assets/database/dictionary.db')
+          manifest = json.loads(Path('app/src/main/assets/dictionary/full_dictionary_manifest.json').read_text(encoding='utf-8'))
+          connection = sqlite3.connect(database)
+          try:
+              assert connection.execute('PRAGMA user_version').fetchone()[0] == 4
+              assert connection.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
+              assert not connection.execute('PRAGMA foreign_key_check').fetchall()
+              count = connection.execute('SELECT COUNT(*) FROM characters').fetchone()[0]
+              assert count == manifest['characterCount'], (count, manifest['characterCount'])
+              assert connection.execute("SELECT COUNT(*) FROM strokes WHERE name != ''").fetchone()[0] >= 25
+              print(f'Verified prepopulated Room database with {count} characters')
+          finally:
+              connection.close()
+          PY
+
+      - name: Persist generated offline assets
         if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
         run: |
           git rm --ignore-unmatch app/src/main/assets/dictionary/full_dictionary.ndjson.gz
           git add app/src/main/assets/dictionary/full_dictionary.ndjson.bin
           git add app/src/main/assets/dictionary/full_dictionary_manifest.json
+          git add app/src/main/assets/dictionary/stroke_vectors.json
+          git add app/src/main/assets/dictionary/stroke_pack.tshs
+          git add app/src/main/assets/dictionary/stroke_pack_manifest.json
+          git add app/src/main/assets/database/dictionary.db
+          git add app/schemas
           if git diff --cached --quiet; then
-            echo 'Dictionary assets are already current.'
+            echo 'Generated offline assets are already current.'
           else
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git commit -m 'data: preserve bundled dictionary gzip bytes [skip ci]'
+            git commit -m 'data: refresh prebuilt dictionary and stroke pack [skip ci]'
             git push origin "HEAD:${GITHUB_REF_NAME}"
           fi
-
-      - name: Generate offline stroke vectors
-        run: python3 tools/generate_stroke_vectors.py --strict
 
       - name: Unit tests and APKs
         run: gradle --stacktrace test assembleDebug assembleRelease
 
-      - name: Verify APK dictionary asset
+      - name: Verify APK offline assets
         run: |
           python3 - <<'PY'
-          import gzip, io, json, zipfile
+          import gzip, io, json, sqlite3, struct, tempfile, zipfile
           from pathlib import Path
+          expected = json.loads(Path('app/src/main/assets/dictionary/full_dictionary_manifest.json').read_text(encoding='utf-8'))['characterCount']
           for apk in (
               Path('app/build/outputs/apk/debug/app-debug.apk'),
               Path('app/build/outputs/apk/release/app-release-unsigned.apk'),
           ):
               with zipfile.ZipFile(apk) as archive:
-                  name = 'assets/dictionary/full_dictionary.ndjson.bin'
-                  assert name in archive.namelist(), f'{name} missing from {apk}'
-                  assert 'assets/dictionary/full_dictionary.ndjson' not in archive.namelist()
-                  payload = archive.read(name)
-                  assert payload[:2] == b'\x1f\x8b'
-                  with gzip.GzipFile(fileobj=io.BytesIO(payload)) as stream:
-                      first = json.loads(stream.readline().decode('utf-8'))
-                  assert first['character']
-                  print(f'{apk}: packaged gzip dictionary is runtime-readable')
+                  dictionary_name = 'assets/dictionary/full_dictionary.ndjson.bin'
+                  stroke_name = 'assets/dictionary/stroke_pack.tshs'
+                  database_name = 'assets/database/dictionary.db'
+                  for name in (dictionary_name, stroke_name, database_name):
+                      assert name in archive.namelist(), f'{name} missing from {apk}'
+
+                  dictionary = archive.read(dictionary_name)
+                  assert dictionary[:2] == b'\x1f\x8b'
+                  with gzip.GzipFile(fileobj=io.BytesIO(dictionary)) as stream:
+                      assert json.loads(stream.readline().decode('utf-8'))['character']
+
+                  stroke_info = archive.getinfo(stroke_name)
+                  database_info = archive.getinfo(database_name)
+                  assert stroke_info.compress_type == zipfile.ZIP_STORED, 'TSHS must remain mmap-compatible'
+                  assert database_info.compress_type == zipfile.ZIP_STORED, 'Room DB must avoid first-launch ZIP inflation'
+                  stroke = archive.read(stroke_name)
+                  magic, version, stroke_count = struct.unpack_from('>4sII', stroke, 0)
+                  assert magic == b'TSHS' and version == 1 and stroke_count >= 9000
+
+                  with tempfile.NamedTemporaryFile(suffix='.db') as temporary:
+                      temporary.write(archive.read(database_name))
+                      temporary.flush()
+                      connection = sqlite3.connect(temporary.name)
+                      try:
+                          assert connection.execute('PRAGMA user_version').fetchone()[0] == 4
+                          assert connection.execute('SELECT COUNT(*) FROM characters').fetchone()[0] == expected
+                      finally:
+                          connection.close()
+                  print(f'{apk}: uncompressed Room DB and {stroke_count}-character stroke pack verified')
           PY
 
       - name: Upload APK artifacts
@@ -118,4 +197,6 @@ jobs:
             app/build/outputs/apk/debug/app-debug.apk
             app/build/outputs/apk/release/app-release-unsigned.apk
             app/src/main/assets/dictionary/full_dictionary_manifest.json
+            app/src/main/assets/dictionary/stroke_pack_manifest.json
+            app/schemas/com.chlna.tongshihanzi.data.dictionary.DictionaryDatabase/4.json
           if-no-files-found: error

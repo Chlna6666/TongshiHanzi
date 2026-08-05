@@ -20,6 +20,7 @@ import com.chlna.tongshihanzi.data.dictionary.DefinitionEntity;
 import com.chlna.tongshihanzi.data.dictionary.PronunciationEntity;
 import com.chlna.tongshihanzi.data.dictionary.StrokeEntity;
 import com.chlna.tongshihanzi.data.dictionary.WordEntity;
+import com.chlna.tongshihanzi.data.stroke.StrokePackRepository;
 import com.chlna.tongshihanzi.speech.TtsManager;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.button.MaterialButton;
@@ -28,6 +29,7 @@ import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.progressindicator.CircularProgressIndicator;
 import com.google.android.material.snackbar.Snackbar;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -47,6 +49,7 @@ public final class CharacterDetailFragment extends Fragment {
     private StrokeOrderView strokeView;
     private MaterialButton favorite;
     private CircularProgressIndicator progress;
+    private List<StrokeEntity> renderedStrokes = Collections.emptyList();
     private boolean autoSpoken;
 
     @Nullable
@@ -78,7 +81,7 @@ public final class CharacterDetailFragment extends Fragment {
         view.findViewById(R.id.speak_button).setOnClickListener(ignored -> speakCharacter());
         favorite.setOnClickListener(ignored -> viewModel.toggleFavorite());
         strokeView.setStepListener((index, name) -> {
-            if (index >= 0 && details != null && index < details.strokes.size()) {
+            if (index >= 0 && index < renderedStrokes.size()) {
                 strokeText.setText("第 " + (index + 1) + " 笔：" + name);
             } else {
                 strokeText.setText(name);
@@ -156,14 +159,23 @@ public final class CharacterDetailFragment extends Fragment {
                         + "\n常用字：" + (details.character.common ? "是" : "否")
                         + "\n频率排序：" + (details.character.frequencyRank >= 99999
                         ? "待补充" : details.character.frequencyRank));
-        source.setText(details.character.id < 0
-                ? "该字通过 Unicode 生僻字兜底展示，读音、部首、释义和笔顺尚未经过项目审校。"
-                : "数据来源标识：" + details.character.sourceId
-                + " · 矢量笔顺来自构建时锁定的数据版本，许可详见关于页面");
 
-        List<StrokeEntity> sortedStrokes = new ArrayList<>(details.strokes);
-        sortedStrokes.sort(Comparator.comparingInt(value -> value.strokeIndex));
-        strokeView.setData(details.character.character, sortedStrokes);
+        List<StrokeEntity> reviewedNames = new ArrayList<>(details.strokes);
+        reviewedNames.sort(Comparator.comparingInt(value -> value.strokeIndex));
+        StrokePackRepository strokeRepository = StrokePackRepository.getInstance(requireContext());
+        renderedStrokes = strokeRepository.load(details.character.character, reviewedNames);
+        strokeView.setData(details.character.character, renderedStrokes);
+
+        String strokeAvailability = renderedStrokes.isEmpty()
+                ? "该字暂无可验证的矢量笔顺，界面不会从字体轮廓伪造笔顺。"
+                : "已从完整离线笔顺包按需读取 " + renderedStrokes.size() + " 笔矢量数据。";
+        source.setText(details.character.id < 0
+                ? "该字通过 Unicode 生僻字兜底展示，读音、部首和释义尚未经过项目审校。\n"
+                + strokeAvailability
+                : "数据来源标识：" + details.character.sourceId
+                + "\n" + strokeAvailability
+                + "\n笔顺包采用中国大陆规范顺序；许可与固定版本详见关于页面。");
+
         renderReading();
 
         if (PreferenceManager.getDefaultSharedPreferences(requireContext())

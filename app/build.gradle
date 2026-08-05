@@ -10,8 +10,8 @@ android {
         applicationId = 'com.chlna.tongshihanzi'
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = '0.2.0'
+        versionCode = 3
+        versionName = '0.3.0'
 
         testInstrumentationRunner = 'androidx.test.runner.AndroidJUnitRunner'
 
@@ -46,6 +46,12 @@ android {
 
     testOptions {
         unitTests.includeAndroidResources = true
+    }
+
+    androidResources {
+        // TSHS must remain mmap-compatible. The prebuilt Room database is also stored
+        // without ZIP Deflate so first launch performs a sequential copy, not full DB decompression.
+        noCompress += ['tshs', 'db']
     }
 
     packaging {
