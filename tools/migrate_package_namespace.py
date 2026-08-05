@@ -29,9 +29,7 @@ SOURCE_ROOTS = (
 )
 
 SKIP_PARTS = {".git", ".gradle", "build", ".idea", ".cache"}
-SKIP_FILES = {
-    Path("tools/migrate_package_namespace.py"),
-}
+SKIP_FILES = {Path("tools/migrate_package_namespace.py")}
 
 
 def move_package_tree(base: Path) -> bool:
@@ -144,7 +142,9 @@ def find_old_references() -> list[str]:
 
 
 def apply_migration() -> None:
-    moved = any(move_package_tree(root) for root in SOURCE_ROOTS)
+    moved = False
+    for root in SOURCE_ROOTS:
+        moved = move_package_tree(root) or moved
     schema_moved = move_room_schema()
     changed = replace_text_references()
     version_changed = bump_version()
