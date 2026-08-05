@@ -57,7 +57,8 @@ public final class SearchResultAdapter
         SearchResult item = getItem(position);
         return item.getCharacterId() >= 0
                 ? item.getCharacterId()
-                : 0x4000_0000L + item.getCharacter().hashCode();
+                : 0x4000_0000_0000_0000L
+                | (item.getCharacter().hashCode() & 0xffff_ffffL);
     }
 
     @NonNull
