@@ -33,8 +33,10 @@ public final class AboutFragment extends Fragment {
             "https://github.com/Chlna6666/TongshiHanzi";
     private static final String PROFILE_URL =
             "https://github.com/Chlna6666";
-    private static final String MANIFEST_ASSET =
+    private static final String DICTIONARY_MANIFEST_ASSET =
             "dictionary/full_dictionary_manifest.json";
+    private static final String STROKE_MANIFEST_ASSET =
+            "dictionary/stroke_pack_manifest.json";
 
     @Nullable
     @Override
@@ -61,33 +63,56 @@ public final class AboutFragment extends Fragment {
                 .setOnClickListener(ignored -> openUrl(PROFILE_URL));
 
         TextView dataVersion = view.findViewById(R.id.data_version);
-        dataVersion.setText(readDictionarySummary());
+        dataVersion.setText(readDataSummary());
     }
 
-    private String readDictionarySummary() {
+    private String readDataSummary() {
+        try {
+            JSONObject dictionary = readJsonAsset(DICTIONARY_MANIFEST_ASSET);
+            JSONObject strokePack = readJsonAsset(STROKE_MANIFEST_ASSET);
+            NumberFormat numbers = NumberFormat.getIntegerInstance(Locale.CHINA);
+
+            int dictionaryCount = dictionary.optInt("characterCount", 0);
+            String dictionaryVersion = dictionary.optString("dataVersion", "未知");
+            String dictionaryCommit = dictionary.optString("sourceCommit", "");
+            int strokeCount = strokePack.optInt("characterCount", 0);
+            int curatedStrokeCount = strokePack.optInt("validatedCuratedCount", 0);
+            JSONObject sourceCounts = strokePack.optJSONObject("sourceCounts");
+            int primaryStrokes = sourceCounts == null
+                    ? 0 : sourceCounts.optInt("makemeahanzi", 0);
+            int fallbackStrokes = sourceCounts == null
+                    ? 0 : sourceCounts.optInt("animcjk-zh-hans", 0);
+
+            return "内置汉字：" + numbers.format(dictionaryCount) + " 个\n"
+                    + "儿童审校覆盖：25 个核心汉字\n"
+                    + "词库来源：mapull/chinese-dictionary\n"
+                    + "词库版本：" + dictionaryVersion + "\n"
+                    + "词库固定提交：" + shortCommit(dictionaryCommit) + "\n\n"
+                    + "矢量笔顺：" + numbers.format(strokeCount) + " 个汉字\n"
+                    + "审校字笔顺校验：" + curatedStrokeCount + "/25\n"
+                    + "Make Me a Hanzi：" + numbers.format(primaryStrokes) + " 个\n"
+                    + "AnimCJK 简体补充：" + numbers.format(fallbackStrokes) + " 个\n"
+                    + "规范：中华人民共和国大陆简体字形与笔顺优先";
+        } catch (Exception ignored) {
+            return getString(R.string.about_dictionary_fallback);
+        }
+    }
+
+    private JSONObject readJsonAsset(String asset) throws Exception {
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(
-                requireContext().getAssets().open(MANIFEST_ASSET),
+                requireContext().getAssets().open(asset),
                 StandardCharsets.UTF_8))) {
             StringBuilder json = new StringBuilder();
             String line;
             while ((line = reader.readLine()) != null) {
                 json.append(line);
             }
-            JSONObject manifest = new JSONObject(json.toString());
-            int count = manifest.optInt("characterCount", 0);
-            String version = manifest.optString("dataVersion", "未知");
-            String commit = manifest.optString("sourceCommit", "");
-            String formattedCount = NumberFormat.getIntegerInstance(Locale.CHINA)
-                    .format(count);
-            String shortCommit = commit.length() > 12 ? commit.substring(0, 12) : commit;
-            return "内置汉字：" + formattedCount + " 个\n"
-                    + "审校覆盖：25 个核心汉字\n"
-                    + "扩展来源：mapull/chinese-dictionary\n"
-                    + "数据版本：" + version + "\n"
-                    + "固定提交：" + shortCommit;
-        } catch (Exception ignored) {
-            return getString(R.string.about_dictionary_fallback);
+            return new JSONObject(json.toString());
         }
+    }
+
+    private static String shortCommit(String value) {
+        return value.length() > 12 ? value.substring(0, 12) : value;
     }
 
     private void openUrl(String url) {
