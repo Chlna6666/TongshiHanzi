@@ -22,7 +22,7 @@ final class DictionarySeedLoader {
     private static final String FULL_MANIFEST_ASSET =
             "dictionary/full_dictionary_manifest.json";
     private static final String FULL_DATA_ASSET =
-            "dictionary/full_dictionary.ndjson.gz";
+            "dictionary/full_dictionary.ndjson.bin";
     private static final String STROKE_ASSET = "dictionary/stroke_vectors.json";
     private static final int BATCH_CHARACTER_COUNT = 256;
 
