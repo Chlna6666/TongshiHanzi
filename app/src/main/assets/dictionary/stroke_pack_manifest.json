@@ -1,0 +1,32 @@
+{
+  "format": "TSHS",
+  "formatVersion": 1,
+  "characterCount": 10210,
+  "curatedCharacterCount": 25,
+  "validatedCuratedCount": 25,
+  "missingCurated": [],
+  "sourceCounts": {
+    "makemeahanzi": 9574,
+    "animcjk-zh-hans": 636
+  },
+  "sources": [
+    {
+      "sourceId": "makemeahanzi",
+      "repository": "skishore/makemeahanzi",
+      "commit": "bddc96d41bef78427ed0e034e9f7e31d71fd1b92",
+      "file": "graphics.txt",
+      "licenseId": "Arphic-1999",
+      "note": "Primary PRC stroke-order vectors."
+    },
+    {
+      "sourceId": "animcjk-zh-hans",
+      "repository": "parsimonhi/animCJK",
+      "commit": "ec5e17cca76c87587790bcbce5ea0b4d4fb753d6",
+      "file": "graphicsZhHans.txt",
+      "licenseId": "Arphic-1999",
+      "note": "Secondary ZhHans fallback for additional uncommon characters."
+    }
+  ],
+  "sha256": "ad229d1a70feb40b91109a155b4abb0d4d561f4cfb3a547819dd3bf992181bd4",
+  "notes": "PRC/ZhHans stroke order. Primary records come from Make Me a Hanzi; AnimCJK contributes only code points absent from the primary corpus. Payloads are independently zlib-compressed and loaded on demand."
+}
