@@ -65,7 +65,7 @@ public final class MotionEffects {
     /** Animates a result card only when a holder is rebound to a different stable item. */
     public static void enterListItem(View item, long stableKey, int adapterPosition) {
         Long previous = ITEM_KEYS.put(item, stableKey);
-        if (previous != null && previous == stableKey) {
+        if (previous != null && previous.longValue() == stableKey) {
             return;
         }
 
@@ -134,9 +134,30 @@ public final class MotionEffects {
     public static void setBottomBarVisible(View bar, boolean visible, int hiddenOffset) {
         MotionState motion = state(bar);
         motion.bottomTargetVisible = visible;
-        motion.bottomHiddenOffset = Math.max(hiddenOffset, bar.getHeight());
-
         MotionLevel level = level(bar.getContext());
+
+        boolean wasHidden = bar.getVisibility() != View.VISIBLE;
+        if (visible && wasHidden) {
+            bar.setVisibility(View.VISIBLE);
+            bar.setAlpha(0f);
+        }
+
+        if (bar.getHeight() == 0) {
+            if (!visible) {
+                cancel(motion);
+                bar.setAlpha(0f);
+                bar.setVisibility(View.GONE);
+                return;
+            }
+            bar.post(() -> {
+                if (bar.isAttachedToWindow()) {
+                    setBottomBarVisible(bar, true, hiddenOffset);
+                }
+            });
+            return;
+        }
+
+        motion.bottomHiddenOffset = Math.max(hiddenOffset, bar.getHeight());
         if (level == MotionLevel.OFF) {
             cancel(motion);
             bar.setTranslationY(visible ? 0f : motion.bottomHiddenOffset);
@@ -145,17 +166,9 @@ public final class MotionEffects {
             return;
         }
 
-        if (bar.getHeight() == 0) {
-            bar.post(() -> setBottomBarVisible(bar, visible, hiddenOffset));
-            return;
-        }
-
         if (visible) {
-            boolean wasHidden = bar.getVisibility() != View.VISIBLE;
-            bar.setVisibility(View.VISIBLE);
-            if (wasHidden) {
+            if (wasHidden || bar.getAlpha() <= 0.01f) {
                 bar.setTranslationY(motion.bottomHiddenOffset);
-                bar.setAlpha(0f);
             }
             springTo(bar, DynamicAnimation.TRANSLATION_Y, 0f, level);
             springTo(bar, DynamicAnimation.ALPHA, 1f, level);
