@@ -3,7 +3,7 @@ plugins {
     id 'application'
 }
 
-group = 'com.chlna.tongshihanzi'
+group = 'com.chlna6666.tongshihanzi'
 version = '0.1.0'
 
 java {
@@ -13,7 +13,7 @@ java {
 }
 
 application {
-    mainClass = 'com.chlna.tongshihanzi.builder.DictionaryValidator'
+    mainClass = 'com.chlna6666.tongshihanzi.builder.DictionaryValidator'
 }
 
 dependencies {
