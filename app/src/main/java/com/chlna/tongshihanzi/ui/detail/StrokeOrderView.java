@@ -17,7 +17,6 @@ import android.view.View;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import androidx.annotation.Nullable;
 import androidx.core.graphics.PathParser;
-import com.chlna.tongshihanzi.R;
 import com.chlna.tongshihanzi.data.dictionary.StrokeEntity;
 import com.google.android.material.color.MaterialColors;
 import java.util.ArrayList;
@@ -52,6 +51,7 @@ public final class StrokeOrderView extends View {
     private final RectF glyphBox = new RectF();
     private final List<RawStroke> rawStrokes = new ArrayList<>();
     private final List<DrawStroke> drawStrokes = new ArrayList<>();
+    private final Runnable nextStroke = this::advanceToNextStroke;
 
     private String character = "";
     private int currentStroke = -1;
@@ -114,6 +114,7 @@ public final class StrokeOrderView extends View {
             invalidate();
             return;
         }
+        removeCallbacks(nextStroke);
         stopAnimatorOnly();
         currentStroke = 0;
         strokeProgress = 0f;
@@ -121,7 +122,7 @@ public final class StrokeOrderView extends View {
     }
 
     public void stopAnimation() {
-        removeCallbacks(this::advanceToNextStroke);
+        removeCallbacks(nextStroke);
         stopAnimatorOnly();
     }
 
@@ -172,7 +173,7 @@ public final class StrokeOrderView extends View {
                 if (cancelled) return;
                 strokeProgress = 1f;
                 invalidate();
-                postDelayed(StrokeOrderView.this::advanceToNextStroke, BETWEEN_STROKES_MS);
+                postDelayed(nextStroke, BETWEEN_STROKES_MS);
             }
         });
         animator.start();
@@ -229,7 +230,8 @@ public final class StrokeOrderView extends View {
     }
 
     private void drawVectorGlyph(Canvas canvas) {
-        int primary = MaterialColors.getColor(this, R.attr.colorPrimary);
+        int primary = MaterialColors.getColor(this,
+                com.google.android.material.R.attr.colorPrimary);
         int onSurface = MaterialColors.getColor(this,
                 com.google.android.material.R.attr.colorOnSurface);
 
@@ -258,8 +260,7 @@ public final class StrokeOrderView extends View {
             float remaining = Math.max(0f, Math.min(1f, strokeProgress));
             do {
                 float contourLength = measure.getLength();
-                float contourFraction = remaining;
-                measure.getSegment(0f, contourLength * contourFraction, segment, true);
+                measure.getSegment(0f, contourLength * remaining, segment, true);
                 if (remaining < 1f) break;
             } while (measure.nextContour());
 
@@ -297,6 +298,7 @@ public final class StrokeOrderView extends View {
         RectF temporary = new RectF();
         boolean first = true;
         for (RawStroke stroke : rawStrokes) {
+            if (stroke.fill == null) return;
             stroke.fill.computeBounds(temporary, true);
             if (first) {
                 sourceBounds.set(temporary);
@@ -326,6 +328,7 @@ public final class StrokeOrderView extends View {
         });
 
         for (RawStroke raw : rawStrokes) {
+            if (raw.fill == null || raw.median == null) return;
             Path fill = new Path();
             Path median = new Path();
             raw.fill.transform(transform, fill);
