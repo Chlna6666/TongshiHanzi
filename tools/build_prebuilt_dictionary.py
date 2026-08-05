@@ -275,6 +275,7 @@ def build_database(
         connection.execute("PRAGMA page_size=4096")
         version = apply_room_schema(connection, schema_path)
         insert_sources(connection, manifest)
+        connection.commit()
 
         counters = {
             "pronunciation": 1,
