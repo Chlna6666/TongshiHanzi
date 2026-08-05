@@ -1,0 +1,1 @@
+package com.chlna.tongshihanzi.domain.search;import static org.junit.Assert.*;import org.junit.Test;public class StrokeRangeTest{@Test public void parsesRange(){assertEquals(new StrokeRange(5,8),StrokeRange.parse("8-5"));assertEquals(new StrokeRange(6,6),StrokeRange.parse("6"));}@Test(expected=IllegalArgumentException.class)public void rejectsZero(){StrokeRange.parse("0");}}

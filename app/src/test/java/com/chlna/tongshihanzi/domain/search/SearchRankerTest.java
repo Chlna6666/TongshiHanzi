@@ -1,0 +1,1 @@
+package com.chlna.tongshihanzi.domain.search;import static org.junit.Assert.*;import org.junit.Test;public class SearchRankerTest{@Test public void exactCharacterWins(){int exact=SearchRanker.score("行","行","xing","TFHH",15,"汉字匹配");int prefix=SearchRanker.score("xing","行","xing","TFHH",15,"拼音前缀");assertTrue(exact>prefix);}}
