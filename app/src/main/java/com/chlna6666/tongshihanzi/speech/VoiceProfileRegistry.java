@@ -16,9 +16,9 @@ import java.util.Set;
 /**
  * Conservative classifier for engine-specific Chinese voice names.
  *
- * <p>Android does not expose standardized gender or age fields for a {@link Voice}. Therefore this
- * registry only assigns an adult profile when the engine name or feature metadata contains a known
- * signal. Unknown voices remain neutral instead of being mislabeled as male or female.</p>
+ * <p>Android does not expose standardized voice gender or age fields. A voice is therefore only
+ * assigned to a profile when its engine name or feature metadata provides a known signal. Child
+ * hints always win, and unknown non-child voices may only be used as an adult fallback.</p>
  */
 final class VoiceProfileRegistry {
     enum Profile {
@@ -35,8 +35,10 @@ final class VoiceProfileRegistry {
     }
 
     private static final List<String> CHILD_HINTS = Arrays.asList(
-            "child", "kid", "girl", "boy",
-            "xiaoyi", "xiaoshuang", "xiaoyou", "xiaobei"
+            "child", "children", "kid", "kids", "baby", "teen", "student",
+            "young_boy", "young_girl", "boy", "girl",
+            "xiaoyi", "xiaoshuang", "xiaoyou", "xiaobei", "xiaotong",
+            "童声", "儿童", "小孩", "男孩", "女孩", "少年", "少女"
     );
     private static final List<String> FEMALE_HINTS = Arrays.asList(
             "female", "woman", "adult_female", "gender=female",
@@ -73,17 +75,26 @@ final class VoiceProfileRegistry {
         return matches.isEmpty() ? null : matches.get(0);
     }
 
+    /**
+     * Selects a non-child installed Chinese voice when an engine does not expose recognizable
+     * gender metadata. Pitch calibration in {@link TtsManager} then creates a stable adult male or
+     * female profile without silently falling back to a known child voice.
+     */
     @Nullable
-    static Voice selectAutomatic(List<Voice> voices) {
+    static Voice selectAdultFallback(List<Voice> voices) {
         List<Voice> candidates = new ArrayList<>();
         for (Voice voice : voices) {
-            Profile profile = classify(voice);
-            if (profile != Profile.CHILD && isInstalled(voice)) {
+            if (isInstalled(voice) && classify(voice) != Profile.CHILD) {
                 candidates.add(voice);
             }
         }
         candidates.sort(VOICE_PRIORITY);
         return candidates.isEmpty() ? null : candidates.get(0);
+    }
+
+    @Nullable
+    static Voice selectAutomatic(List<Voice> voices) {
+        return selectAdultFallback(voices);
     }
 
     static boolean hasProfile(List<Voice> voices, String preference) {
