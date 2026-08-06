@@ -33,8 +33,9 @@
         <SeekBarPreference
             android:key="speech_pitch"
             android:defaultValue="100"
-            android:max="150"
-            android:min="50"
+            android:max="120"
+            android:min="80"
+            android:summary="100 为标准青年音调；切换男声或女声时自动恢复标准值"
             android:title="音调"
             app:iconSpaceReserved="false"
             app:showSeekBarValue="true" />
