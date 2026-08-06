@@ -3,6 +3,7 @@ package com.chlna6666.tongshihanzi.ui;
 
 import android.content.res.Configuration;
 import android.graphics.Color;
+import android.media.AudioManager;
 import android.os.Bundle;
 import android.view.View;
 
@@ -40,6 +41,7 @@ public final class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        setVolumeControlStream(AudioManager.STREAM_MUSIC);
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         getWindow().setStatusBarColor(Color.TRANSPARENT);
         getWindow().setNavigationBarColor(Color.TRANSPARENT);

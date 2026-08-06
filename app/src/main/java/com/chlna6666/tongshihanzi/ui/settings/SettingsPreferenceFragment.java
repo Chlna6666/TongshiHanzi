@@ -13,7 +13,6 @@ import androidx.navigation.fragment.NavHostFragment;
 import androidx.preference.ListPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
-import androidx.preference.SeekBarPreference;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.chlna6666.tongshihanzi.R;
@@ -21,6 +20,7 @@ import com.chlna6666.tongshihanzi.data.user.UserRepository;
 import com.chlna6666.tongshihanzi.speech.TtsManager;
 import com.chlna6666.tongshihanzi.util.MotionEffects;
 import com.chlna6666.tongshihanzi.util.ThemeManager;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.snackbar.Snackbar;
 
 import java.util.List;
@@ -52,14 +52,7 @@ public final class SettingsPreferenceFragment extends PreferenceFragmentCompat {
         ListPreference voiceMode = findPreference("voice_mode");
         if (voiceMode != null) {
             voiceMode.setOnPreferenceChangeListener((preference, value) -> {
-                String mode = String.valueOf(value);
-                if ("male".equals(mode) || "female".equals(mode)) {
-                    SeekBarPreference pitch = findPreference("speech_pitch");
-                    if (pitch != null) {
-                        pitch.setValue(100);
-                    }
-                }
-                tts.setVoiceMode(mode, this::updateVoiceControls);
+                tts.setVoiceMode(String.valueOf(value), this::updateVoiceControls);
                 return true;
             });
         }
@@ -79,9 +72,10 @@ public final class SettingsPreferenceFragment extends PreferenceFragmentCompat {
                 return true;
             });
         }
-        Preference speechPitch = findPreference("speech_pitch");
-        if (speechPitch != null) {
-            speechPitch.setOnPreferenceChangeListener((preference, value) -> {
+
+        Preference speechVolume = findPreference("speech_volume");
+        if (speechVolume != null) {
+            speechVolume.setOnPreferenceChangeListener((preference, value) -> {
                 main.post(tts::refreshPreferences);
                 return true;
             });
@@ -152,6 +146,15 @@ public final class SettingsPreferenceFragment extends PreferenceFragmentCompat {
     }
 
     @Override
+    public void onDisplayPreferenceDialog(@NonNull Preference preference) {
+        if (preference instanceof ListPreference) {
+            showRoundedListDialog((ListPreference) preference);
+            return;
+        }
+        super.onDisplayPreferenceDialog(preference);
+    }
+
+    @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle state) {
         super.onViewCreated(view, state);
         preferenceList = getListView();
@@ -178,6 +181,37 @@ public final class SettingsPreferenceFragment extends PreferenceFragmentCompat {
             tts.removeReadyListener(readyListener);
         }
         super.onDestroy();
+    }
+
+    private void showRoundedListDialog(ListPreference preference) {
+        CharSequence[] entries = preference.getEntries();
+        CharSequence[] values = preference.getEntryValues();
+        if (entries == null || values == null || entries.length != values.length) {
+            super.onDisplayPreferenceDialog(preference);
+            return;
+        }
+
+        CharSequence title = preference.getDialogTitle();
+        if (title == null) {
+            title = preference.getTitle();
+        }
+        int selected = preference.findIndexOfValue(preference.getValue());
+        new MaterialAlertDialogBuilder(
+                requireContext(),
+                R.style.ThemeOverlay_TongshiHanzi_MaterialAlertDialog)
+                .setTitle(title)
+                .setSingleChoiceItems(entries, selected, (dialog, which) -> {
+                    if (which < 0 || which >= values.length) {
+                        return;
+                    }
+                    String value = String.valueOf(values[which]);
+                    if (preference.callChangeListener(value)) {
+                        preference.setValue(value);
+                    }
+                    dialog.dismiss();
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
     }
 
     private void updateVoices() {
@@ -226,7 +260,7 @@ public final class SettingsPreferenceFragment extends PreferenceFragmentCompat {
                 && !tts.hasRecognizedProfile(mode)) {
             String requested = "male".equals(mode) ? "成年男声" : "成年女声";
             modePreference.setSummary("设备未提供明确标注的" + requested
-                    + "，已排除儿童声并使用成年音调校准" + active);
+                    + "，已排除儿童声并应用该声音偏好的成年音色" + active);
         } else {
             modePreference.setSummary(modeLabel + active);
         }
@@ -237,7 +271,7 @@ public final class SettingsPreferenceFragment extends PreferenceFragmentCompat {
         if (voices.isEmpty()) {
             voicePreference.setSummary(R.string.tts_unavailable);
         } else if (!manual) {
-            voicePreference.setSummary("当前模式会自动选择非儿童中文语音");
+            voicePreference.setSummary("当前声音偏好会自动选择并校准非儿童中文语音");
         } else {
             int selectedIndex = voicePreference.findIndexOfValue(voicePreference.getValue());
             voicePreference.setSummary(selectedIndex >= 0

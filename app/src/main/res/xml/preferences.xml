@@ -11,7 +11,7 @@
             android:defaultValue="auto"
             android:entries="@array/voice_mode_entries"
             android:entryValues="@array/voice_mode_values"
-            android:summary="%s"
+            android:summary="声音偏好会统一决定语音、音色和内部音调"
             android:title="声音偏好"
             app:iconSpaceReserved="false" />
 
@@ -31,12 +31,12 @@
             app:showSeekBarValue="true" />
 
         <SeekBarPreference
-            android:key="speech_pitch"
+            android:key="speech_volume"
             android:defaultValue="100"
-            android:max="120"
-            android:min="80"
-            android:summary="100 为标准青年音调；切换男声或女声时自动恢复标准值"
-            android:title="音调"
+            android:max="200"
+            android:min="50"
+            android:summary="100% 以内使用系统媒体音量；101–200% 使用软件增益，过高可能失真"
+            android:title="朗读音量"
             app:iconSpaceReserved="false"
             app:showSeekBarValue="true" />
 
@@ -48,7 +48,7 @@
 
         <Preference
             android:key="test_voice"
-            android:summary="你好，我是童识汉字。"
+            android:summary="按当前声音偏好、语速和朗读音量试听"
             android:title="试听语音"
             app:iconSpaceReserved="false" />
     </PreferenceCategory>
