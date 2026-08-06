@@ -13,6 +13,7 @@ import androidx.navigation.fragment.NavHostFragment;
 import androidx.preference.ListPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
+import androidx.preference.SeekBarPreference;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.chlna6666.tongshihanzi.R;
@@ -51,10 +52,14 @@ public final class SettingsPreferenceFragment extends PreferenceFragmentCompat {
         ListPreference voiceMode = findPreference("voice_mode");
         if (voiceMode != null) {
             voiceMode.setOnPreferenceChangeListener((preference, value) -> {
-                main.post(() -> {
-                    updateVoiceControls();
-                    tts.refreshPreferences();
-                });
+                String mode = String.valueOf(value);
+                if ("male".equals(mode) || "female".equals(mode)) {
+                    SeekBarPreference pitch = findPreference("speech_pitch");
+                    if (pitch != null) {
+                        pitch.setValue(100);
+                    }
+                }
+                tts.setVoiceMode(mode, this::updateVoiceControls);
                 return true;
             });
         }
@@ -62,10 +67,7 @@ public final class SettingsPreferenceFragment extends PreferenceFragmentCompat {
         ListPreference voiceName = findPreference("voice_name");
         if (voiceName != null) {
             voiceName.setOnPreferenceChangeListener((preference, value) -> {
-                main.post(() -> {
-                    updateVoiceControls();
-                    tts.refreshPreferences();
-                });
+                tts.setManualVoice(String.valueOf(value), this::updateVoiceControls);
                 return true;
             });
         }
@@ -200,12 +202,6 @@ public final class SettingsPreferenceFragment extends PreferenceFragmentCompat {
         updateVoiceControls();
     }
 
-    private void updateVoicesSafely() {
-        if (isAdded()) {
-            updateVoices();
-        }
-    }
-
     private void updateVoiceControls() {
         if (!isAdded() || tts == null) {
             return;
@@ -224,13 +220,15 @@ public final class SettingsPreferenceFragment extends PreferenceFragmentCompat {
         String modeLabel = modeIndex >= 0
                 ? String.valueOf(modePreference.getEntries()[modeIndex])
                 : "自动选择";
+        String currentVoice = tts.currentVoiceDescription();
+        String active = currentVoice == null ? "" : "\n当前：" + currentVoice;
         if (("male".equals(mode) || "female".equals(mode))
                 && !tts.hasRecognizedProfile(mode)) {
             String requested = "male".equals(mode) ? "成年男声" : "成年女声";
-            modePreference.setSummary("设备未提供可识别的" + requested
-                    + "，将使用最佳中性中文语音");
+            modePreference.setSummary("设备未提供明确标注的" + requested
+                    + "，已排除儿童声并使用成年音调校准" + active);
         } else {
-            modePreference.setSummary(modeLabel);
+            modePreference.setSummary(modeLabel + active);
         }
 
         List<Voice> voices = tts.getChineseVoices();
@@ -239,7 +237,7 @@ public final class SettingsPreferenceFragment extends PreferenceFragmentCompat {
         if (voices.isEmpty()) {
             voicePreference.setSummary(R.string.tts_unavailable);
         } else if (!manual) {
-            voicePreference.setSummary("切换到“手动选择”后可指定设备语音");
+            voicePreference.setSummary("当前模式会自动选择非儿童中文语音");
         } else {
             int selectedIndex = voicePreference.findIndexOfValue(voicePreference.getValue());
             voicePreference.setSummary(selectedIndex >= 0
