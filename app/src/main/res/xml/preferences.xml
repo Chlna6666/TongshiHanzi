@@ -30,6 +30,16 @@
             app:iconSpaceReserved="false"
             app:showSeekBarValue="true" />
 
+        <SeekBarPreference
+            android:key="speech_volume"
+            android:defaultValue="100"
+            android:max="200"
+            android:min="50"
+            android:summary="100% 以内使用系统媒体音量；101–200% 使用软件增益，过高可能失真"
+            android:title="朗读音量"
+            app:iconSpaceReserved="false"
+            app:showSeekBarValue="true" />
+
         <SwitchPreferenceCompat
             android:key="auto_speak"
             android:defaultValue="false"
@@ -38,7 +48,7 @@
 
         <Preference
             android:key="test_voice"
-            android:summary="使用媒体音量以最大朗读响度试听"
+            android:summary="按当前声音偏好、语速和朗读音量试听"
             android:title="试听语音"
             app:iconSpaceReserved="false" />
     </PreferenceCategory>
