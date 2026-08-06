@@ -51,6 +51,7 @@ public final class CharacterDetailFragment extends Fragment {
     private ChipGroup pronunciations;
     private ChipGroup words;
     private StrokeOrderView strokeView;
+    private MaterialButton speakButton;
     private MaterialButton favorite;
     private CircularProgressIndicator progress;
     private List<StrokeEntity> renderedStrokes = Collections.emptyList();
@@ -79,22 +80,26 @@ public final class CharacterDetailFragment extends Fragment {
         strokeView = view.findViewById(R.id.stroke_view);
         strokeText = view.findViewById(R.id.stroke_text);
         source = view.findViewById(R.id.source);
+        speakButton = view.findViewById(R.id.speak_button);
         favorite = view.findViewById(R.id.favorite_button);
         progress = view.findViewById(R.id.progress);
 
         ((MaterialToolbar) view.findViewById(R.id.toolbar)).setNavigationOnClickListener(
                 ignored -> NavHostFragment.findNavController(this).navigateUp());
-        View speak = view.findViewById(R.id.speak_button);
-        MotionEffects.installPressFeedback(speak);
+        MotionEffects.installPressFeedback(speakButton);
         MotionEffects.installPressFeedback(favorite);
-        speak.setOnClickListener(ignored -> speakCharacter());
+        MotionEffects.installPressFeedback(strokeText);
+        speakButton.setOnClickListener(ignored -> speakCharacter());
         favorite.setOnClickListener(ignored -> viewModel.toggleFavorite());
+        strokeText.setOnClickListener(ignored -> strokeView.startAnimation());
+        strokeText.setContentDescription("点击文字开始播放笔顺动画");
         strokeView.setStepListener((index, name) -> {
             if (index >= 0 && index < renderedStrokes.size()) {
                 strokeText.setText("第 " + (index + 1) + " 笔：" + name);
             } else {
                 strokeText.setText(name);
             }
+            strokeText.setContentDescription(strokeText.getText() + "，点击开始或重新播放");
         });
 
         viewModel.character().observe(getViewLifecycleOwner(), value -> {
@@ -178,6 +183,7 @@ public final class CharacterDetailFragment extends Fragment {
         StrokePackRepository strokeRepository = StrokePackRepository.getInstance(requireContext());
         renderedStrokes = strokeRepository.load(details.character.character, reviewedNames);
         strokeView.setData(details.character.character, renderedStrokes);
+        strokeText.setEnabled(!renderedStrokes.isEmpty());
 
         String strokeAvailability = renderedStrokes.isEmpty()
                 ? "该字暂无可验证的矢量笔顺，界面不会从字体轮廓伪造笔顺。"
@@ -207,6 +213,9 @@ public final class CharacterDetailFragment extends Fragment {
         if (details == null || selected == null) {
             return;
         }
+        speakButton.setContentDescription(
+                "朗读汉字" + details.character.character + "，读音" + selected.pinyinTone);
+
         definitions.removeAllViews();
         List<DefinitionEntity> definitionValues = details.definitions.stream()
                 .filter(value -> value.pronunciationId == selected.id)
@@ -256,8 +265,9 @@ public final class CharacterDetailFragment extends Fragment {
         if (details == null) {
             return;
         }
+        String pinyin = selected == null ? "" : selected.pinyinTone;
         boolean accepted = TtsManager.getInstance(requireContext())
-                .speakCharacter(details.character.character);
+                .speakPronunciation(details.character.character, pinyin);
         if (!accepted) {
             Toast.makeText(requireContext(), R.string.tts_unavailable, Toast.LENGTH_SHORT)
                     .show();
