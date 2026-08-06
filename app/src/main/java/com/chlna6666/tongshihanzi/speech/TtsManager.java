@@ -163,10 +163,11 @@ public final class TtsManager {
     /**
      * Speaks the currently selected reading of a polyphonic character.
      *
-     * <p>The visible character remains the utterance text, while a {@link TtsSpan} supplies the
-     * selected tone-marked pinyin as the text to synthesize. This avoids silently falling back to
-     * the character's first/default reading and also avoids replacing the button with a whole
-     * sample word.</p>
+     * <p>Android TTS engines are allowed to ignore pronunciation metadata attached to a Han
+     * character. Passing the Han character as the underlying utterance therefore still causes many
+     * engines to use the dictionary's first reading. To make the selected reading deterministic,
+     * the tone-marked pinyin itself is now the underlying utterance. A verbatim TTS span is also
+     * supplied as a hint, but correctness no longer depends on a vendor honoring that span.</p>
      */
     public boolean speakPronunciation(String character, String pinyinTone) {
         String glyph = SpeechTextPolicy.character(character);
@@ -177,11 +178,11 @@ public final class TtsManager {
         if (reading.isEmpty()) {
             return speakInternal(glyph, "character");
         }
-        SpannableString utterance = new SpannableString(glyph);
+        SpannableString utterance = new SpannableString(reading);
         utterance.setSpan(
-                new TtsSpan.TextBuilder(reading).build(),
+                new TtsSpan.VerbatimBuilder(reading).build(),
                 0,
-                glyph.length(),
+                reading.length(),
                 Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         return speakInternal(utterance, "pronunciation");
     }
