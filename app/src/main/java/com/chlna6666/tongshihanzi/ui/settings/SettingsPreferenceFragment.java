@@ -73,6 +73,14 @@ public final class SettingsPreferenceFragment extends PreferenceFragmentCompat {
             });
         }
 
+        Preference speechVolume = findPreference("speech_volume");
+        if (speechVolume != null) {
+            speechVolume.setOnPreferenceChangeListener((preference, value) -> {
+                main.post(tts::refreshPreferences);
+                return true;
+            });
+        }
+
         Preference test = findPreference("test_voice");
         if (test != null) {
             test.setOnPreferenceClickListener(preference -> {
