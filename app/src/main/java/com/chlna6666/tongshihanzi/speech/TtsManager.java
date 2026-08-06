@@ -5,10 +5,13 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.media.AudioAttributes;
 import android.media.AudioManager;
+import android.media.MediaPlayer;
+import android.media.audiofx.LoudnessEnhancer;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
 import android.speech.tts.Voice;
 import android.text.SpannableString;
 import android.text.Spanned;
@@ -18,12 +21,16 @@ import android.util.Log;
 import androidx.annotation.Nullable;
 import androidx.preference.PreferenceManager;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /** Single application-wide TTS engine with explicit character, pronunciation and word APIs. */
@@ -32,13 +39,18 @@ public final class TtsManager {
     private static final float MALE_PROFILE_PITCH = 0.90f;
     private static final float FEMALE_PROFILE_PITCH = 1.00f;
     private static final float DEFAULT_PROFILE_PITCH = 1.00f;
-    private static final float FULL_UTTERANCE_VOLUME = 1.00f;
     private static volatile TtsManager instance;
 
     private final Context context;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final List<Runnable> readyListeners = new CopyOnWriteArrayList<>();
+    private final Map<String, PendingBoostedPlayback> pendingBoosted =
+            new ConcurrentHashMap<>();
+
     private TextToSpeech tts;
+    private MediaPlayer activePlayer;
+    private LoudnessEnhancer activeEnhancer;
+    private File activeFile;
     private volatile boolean ready;
     private volatile boolean initializing;
 
@@ -70,6 +82,34 @@ public final class TtsManager {
                 notifyReadyListeners();
                 return;
             }
+            tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                @Override
+                public void onStart(String utteranceId) {
+                }
+
+                @Override
+                public void onDone(String utteranceId) {
+                    PendingBoostedPlayback pending = pendingBoosted.remove(utteranceId);
+                    if (pending != null) {
+                        main.post(() -> playBoostedFile(pending));
+                    }
+                }
+
+                @Override
+                public void onError(String utteranceId) {
+                    discardPending(utteranceId);
+                }
+
+                @Override
+                public void onError(String utteranceId, int errorCode) {
+                    discardPending(utteranceId);
+                }
+
+                @Override
+                public void onStop(String utteranceId, boolean interrupted) {
+                    discardPending(utteranceId);
+                }
+            });
             configureAudioRoute();
             int language = tts.setLanguage(Locale.SIMPLIFIED_CHINESE);
             ready = language != TextToSpeech.LANG_MISSING_DATA
@@ -165,9 +205,8 @@ public final class TtsManager {
      *
      * <p>Android TTS engines are allowed to ignore pronunciation metadata attached to a Han
      * character. Passing the Han character as the underlying utterance therefore still causes many
-     * engines to use the dictionary's first reading. To make the selected reading deterministic,
-     * the tone-marked pinyin itself is now the underlying utterance. A verbatim TTS span is also
-     * supplied as a hint, but correctness no longer depends on a vendor honoring that span.</p>
+     * engines to use the dictionary's first reading. The selected tone-marked pinyin is now the
+     * underlying utterance, so switching chips cannot fall back to the first Han reading.</p>
      */
     public boolean speakPronunciation(String character, String pinyinTone) {
         String glyph = SpeechTextPolicy.character(character);
@@ -197,15 +236,20 @@ public final class TtsManager {
         return speakInternal(SpeechTextPolicy.word(text), "text");
     }
 
-    public void stop() {
+    public synchronized void stop() {
         if (tts != null) {
             tts.stop();
         }
+        for (PendingBoostedPlayback pending : pendingBoosted.values()) {
+            deleteQuietly(pending.file);
+        }
+        pendingBoosted.clear();
+        releaseActivePlayback();
     }
 
     public synchronized void shutdown() {
+        stop();
         if (tts != null) {
-            tts.stop();
             tts.shutdown();
             tts = null;
         }
@@ -233,13 +277,137 @@ public final class TtsManager {
             return false;
         }
         applyPreferences();
-        tts.stop();
+        stop();
+
+        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
+        int volumePercent = SpeechVolumePolicy.clampPercent(preferences.getInt(
+                "speech_volume", SpeechVolumePolicy.DEFAULT_PERCENT));
+        if (SpeechVolumePolicy.requiresSoftwareBoost(volumePercent)) {
+            return synthesizeBoosted(text, type, volumePercent);
+        }
+        return speakDirect(text, type, SpeechVolumePolicy.directVolume(volumePercent));
+    }
+
+    private boolean speakDirect(CharSequence text, String type, float volume) {
+        if (tts == null) {
+            return false;
+        }
         Bundle parameters = new Bundle();
-        parameters.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, FULL_UTTERANCE_VOLUME);
+        parameters.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, volume);
         parameters.putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, AudioManager.STREAM_MUSIC);
         String utteranceId = "tongshi-" + type + '-' + System.nanoTime();
         return tts.speak(text, TextToSpeech.QUEUE_FLUSH, parameters, utteranceId)
                 == TextToSpeech.SUCCESS;
+    }
+
+    private boolean synthesizeBoosted(CharSequence text, String type, int volumePercent) {
+        if (tts == null) {
+            return false;
+        }
+        File file;
+        try {
+            file = File.createTempFile("tongshi-tts-", ".wav", context.getCacheDir());
+        } catch (IOException exception) {
+            Log.w(TAG, "Unable to create boosted TTS cache file", exception);
+            return speakDirect(text, type, 1f);
+        }
+
+        String utteranceId = "tongshi-boost-" + type + '-' + System.nanoTime();
+        PendingBoostedPlayback pending = new PendingBoostedPlayback(
+                utteranceId, file, text, type, volumePercent);
+        pendingBoosted.put(utteranceId, pending);
+
+        Bundle parameters = new Bundle();
+        parameters.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1f);
+        parameters.putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, AudioManager.STREAM_MUSIC);
+        int status = tts.synthesizeToFile(text, parameters, file, utteranceId);
+        if (status != TextToSpeech.SUCCESS) {
+            pendingBoosted.remove(utteranceId);
+            deleteQuietly(file);
+            return speakDirect(text, type, 1f);
+        }
+        return true;
+    }
+
+    private void playBoostedFile(PendingBoostedPlayback pending) {
+        releaseActivePlayback();
+        MediaPlayer player = new MediaPlayer();
+        try {
+            player.setAudioAttributes(new AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build());
+            player.setDataSource(pending.file.getAbsolutePath());
+            player.setOnPreparedListener(prepared -> {
+                if (activePlayer != prepared) {
+                    return;
+                }
+                try {
+                    int gain = SpeechVolumePolicy.boostMillibels(pending.volumePercent);
+                    activeEnhancer = new LoudnessEnhancer(prepared.getAudioSessionId());
+                    activeEnhancer.setTargetGain(gain);
+                    activeEnhancer.setEnabled(gain > 0);
+                    prepared.setVolume(1f, 1f);
+                    prepared.start();
+                } catch (RuntimeException exception) {
+                    Log.w(TAG, "Unable to enable boosted TTS playback", exception);
+                    releaseActivePlayback();
+                    speakDirect(pending.text, pending.type, 1f);
+                }
+            });
+            player.setOnCompletionListener(completed -> releaseIfActive(completed));
+            player.setOnErrorListener((failed, what, extra) -> {
+                Log.w(TAG, "Boosted TTS playback failed: " + what + '/' + extra);
+                releaseIfActive(failed);
+                speakDirect(pending.text, pending.type, 1f);
+                return true;
+            });
+            activePlayer = player;
+            activeFile = pending.file;
+            player.prepareAsync();
+        } catch (IOException | RuntimeException exception) {
+            Log.w(TAG, "Unable to prepare boosted TTS playback", exception);
+            if (activePlayer == player) {
+                activePlayer = null;
+                activeFile = null;
+            }
+            player.release();
+            deleteQuietly(pending.file);
+            speakDirect(pending.text, pending.type, 1f);
+        }
+    }
+
+    private void discardPending(String utteranceId) {
+        PendingBoostedPlayback pending = pendingBoosted.remove(utteranceId);
+        if (pending != null) {
+            deleteQuietly(pending.file);
+        }
+    }
+
+    private synchronized void releaseIfActive(MediaPlayer player) {
+        if (activePlayer == player) {
+            releaseActivePlayback();
+        }
+    }
+
+    private synchronized void releaseActivePlayback() {
+        if (activeEnhancer != null) {
+            try {
+                activeEnhancer.release();
+            } catch (RuntimeException ignored) {
+            }
+            activeEnhancer = null;
+        }
+        if (activePlayer != null) {
+            try {
+                activePlayer.stop();
+            } catch (IllegalStateException ignored) {
+            }
+            activePlayer.release();
+            activePlayer = null;
+        }
+        deleteQuietly(activeFile);
+        activeFile = null;
     }
 
     private void reconfigure(@Nullable Runnable afterApply) {
@@ -260,7 +428,7 @@ public final class TtsManager {
         }
         main.post(() -> {
             if (tts != null && ready) {
-                tts.stop();
+                stop();
                 applyPreferences();
             }
             if (afterApply != null) {
@@ -285,15 +453,24 @@ public final class TtsManager {
         }
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
         String mode = normalizeMode(preferences.getString("voice_mode", "auto"));
+        SharedPreferences.Editor migration = null;
         if (preferences.contains("speech_pitch")) {
-            // Remove the obsolete raw pitch control. Pitch now belongs to the selected voice profile.
-            preferences.edit().remove("speech_pitch").apply();
+            migration = preferences.edit().remove("speech_pitch");
+        }
+        int rawVolume = preferences.getInt("speech_volume", SpeechVolumePolicy.DEFAULT_PERCENT);
+        int safeVolume = SpeechVolumePolicy.clampPercent(rawVolume);
+        if (safeVolume != rawVolume) {
+            if (migration == null) {
+                migration = preferences.edit();
+            }
+            migration.putInt("speech_volume", safeVolume);
+        }
+        if (migration != null) {
+            migration.apply();
         }
 
         configureAudioRoute();
         tts.setSpeechRate(clamp(preferences.getInt("speech_rate", 90) / 100f, 0.5f, 1.5f));
-        // Reload the Chinese locale before selecting a concrete voice. Several OEM engines retain
-        // their previous child voice unless the locale/voice pair is reapplied after a mode change.
         tts.setLanguage(Locale.SIMPLIFIED_CHINESE);
 
         List<Voice> voices = getChineseVoices();
@@ -324,7 +501,6 @@ public final class TtsManager {
             }
         }
 
-        // Pitch is an implementation detail of the voice preference, not a user-facing raw value.
         float profilePitch = "male".equals(mode) ? MALE_PROFILE_PITCH
                 : "female".equals(mode) ? FEMALE_PROFILE_PITCH
                 : DEFAULT_PROFILE_PITCH;
@@ -343,9 +519,37 @@ public final class TtsManager {
         return Math.max(minimum, Math.min(maximum, value));
     }
 
+    private static void deleteQuietly(@Nullable File file) {
+        if (file != null && file.exists() && !file.delete()) {
+            file.deleteOnExit();
+        }
+    }
+
     private void notifyReadyListeners() {
         for (Runnable listener : readyListeners) {
             main.post(listener);
+        }
+    }
+
+    private static final class PendingBoostedPlayback {
+        final String utteranceId;
+        final File file;
+        final CharSequence text;
+        final String type;
+        final int volumePercent;
+
+        PendingBoostedPlayback(
+                String utteranceId,
+                File file,
+                CharSequence text,
+                String type,
+                int volumePercent
+        ) {
+            this.utteranceId = utteranceId;
+            this.file = file;
+            this.text = text;
+            this.type = type;
+            this.volumePercent = volumePercent;
         }
     }
 }
