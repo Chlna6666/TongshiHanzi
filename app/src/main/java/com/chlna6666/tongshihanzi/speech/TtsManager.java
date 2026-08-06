@@ -4,6 +4,8 @@ package com.chlna6666.tongshihanzi.speech;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.media.AudioAttributes;
+import android.media.AudioManager;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.speech.tts.TextToSpeech;
@@ -27,9 +29,10 @@ import java.util.concurrent.CopyOnWriteArrayList;
 /** Single application-wide TTS engine with explicit character, pronunciation and word APIs. */
 public final class TtsManager {
     private static final String TAG = "TtsManager";
-    private static final int STANDARD_PITCH = 100;
-    private static final int MIN_SAFE_PITCH = 80;
-    private static final int MAX_SAFE_PITCH = 120;
+    private static final float MALE_PROFILE_PITCH = 0.90f;
+    private static final float FEMALE_PROFILE_PITCH = 1.00f;
+    private static final float DEFAULT_PROFILE_PITCH = 1.00f;
+    private static final float FULL_UTTERANCE_VOLUME = 1.00f;
     private static volatile TtsManager instance;
 
     private final Context context;
@@ -67,10 +70,7 @@ public final class TtsManager {
                 notifyReadyListeners();
                 return;
             }
-            tts.setAudioAttributes(new AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                    .build());
+            configureAudioRoute();
             int language = tts.setLanguage(Locale.SIMPLIFIED_CHINESE);
             ready = language != TextToSpeech.LANG_MISSING_DATA
                     && language != TextToSpeech.LANG_NOT_SUPPORTED;
@@ -130,30 +130,27 @@ public final class TtsManager {
         reconfigure(null);
     }
 
-    /**
-     * Persists and applies a voice profile immediately. Extreme legacy pitch values are reset so a
-     * requested adult voice cannot remain child-like because an old pitch value was 140% or higher.
-     */
+    /** Persists and immediately applies a voice profile, including its internal adult pitch. */
     public void setVoiceMode(String requestedMode, @Nullable Runnable afterApply) {
         String mode = normalizeMode(requestedMode);
-        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
-        SharedPreferences.Editor editor = preferences.edit()
-                .putString("voice_mode", mode);
+        SharedPreferences.Editor editor = PreferenceManager
+                .getDefaultSharedPreferences(context)
+                .edit()
+                .putString("voice_mode", mode)
+                .remove("speech_pitch");
         if (!"manual".equals(mode)) {
             editor.remove("voice_name");
-        }
-        if ("male".equals(mode) || "female".equals(mode)) {
-            editor.putInt("speech_pitch", STANDARD_PITCH);
         }
         editor.apply();
         reconfigure(afterApply);
     }
 
-    /** Applies an explicitly selected installed voice and leaves gender/age inference disabled. */
+    /** Applies an explicitly selected installed voice without additional gender inference. */
     public void setManualVoice(String voiceName, @Nullable Runnable afterApply) {
         PreferenceManager.getDefaultSharedPreferences(context).edit()
                 .putString("voice_mode", "manual")
                 .putString("voice_name", voiceName == null ? "" : voiceName)
+                .remove("speech_pitch")
                 .apply();
         reconfigure(afterApply);
     }
@@ -236,8 +233,11 @@ public final class TtsManager {
         }
         applyPreferences();
         tts.stop();
+        Bundle parameters = new Bundle();
+        parameters.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, FULL_UTTERANCE_VOLUME);
+        parameters.putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, AudioManager.STREAM_MUSIC);
         String utteranceId = "tongshi-" + type + '-' + System.nanoTime();
-        return tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+        return tts.speak(text, TextToSpeech.QUEUE_FLUSH, parameters, utteranceId)
                 == TextToSpeech.SUCCESS;
     }
 
@@ -268,19 +268,28 @@ public final class TtsManager {
         });
     }
 
+    private void configureAudioRoute() {
+        if (tts == null) {
+            return;
+        }
+        tts.setAudioAttributes(new AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build());
+    }
+
     private void applyPreferences() {
         if (tts == null) {
             return;
         }
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
         String mode = normalizeMode(preferences.getString("voice_mode", "auto"));
-        int rawPitch = preferences.getInt("speech_pitch", STANDARD_PITCH);
-        int safePitch = rawPitch < MIN_SAFE_PITCH || rawPitch > MAX_SAFE_PITCH
-                ? STANDARD_PITCH : rawPitch;
-        if (safePitch != rawPitch) {
-            preferences.edit().putInt("speech_pitch", safePitch).apply();
+        if (preferences.contains("speech_pitch")) {
+            // Remove the obsolete raw pitch control. Pitch now belongs to the selected voice profile.
+            preferences.edit().remove("speech_pitch").apply();
         }
 
+        configureAudioRoute();
         tts.setSpeechRate(clamp(preferences.getInt("speech_rate", 90) / 100f, 0.5f, 1.5f));
         // Reload the Chinese locale before selecting a concrete voice. Several OEM engines retain
         // their previous child voice unless the locale/voice pair is reapplied after a mode change.
@@ -314,12 +323,11 @@ public final class TtsManager {
             }
         }
 
-        // The slider is a small adult-voice adjustment, not a raw 50%-150% multiplier. This keeps
-        // both profiles in a normal young-adult range even on engines exposing only one base voice.
-        float adjustment = (safePitch - STANDARD_PITCH) / 500f;
-        float basePitch = "male".equals(mode) ? 0.86f
-                : "female".equals(mode) ? 1.00f : 0.98f;
-        tts.setPitch(clamp(basePitch + adjustment, 0.78f, 1.08f));
+        // Pitch is an implementation detail of the voice preference, not a user-facing raw value.
+        float profilePitch = "male".equals(mode) ? MALE_PROFILE_PITCH
+                : "female".equals(mode) ? FEMALE_PROFILE_PITCH
+                : DEFAULT_PROFILE_PITCH;
+        tts.setPitch(profilePitch);
     }
 
     private static String normalizeMode(String value) {
